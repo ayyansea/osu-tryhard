@@ -212,6 +212,7 @@ namespace osu.Game.Screens.Edit
         private Bindable<bool> editorHitMarkers;
         private Bindable<bool> editorAutoSeekOnPlacement;
         private Bindable<bool> editorLimitedDistanceSnap;
+        private Bindable<bool> editorShowSliderSectionAngles;
         private Bindable<bool> editorTimelineShowTimingChanges;
         private Bindable<bool> editorTimelineShowBreaks;
         private Bindable<bool> editorTimelineShowTicks;
@@ -326,6 +327,7 @@ namespace osu.Game.Screens.Edit
             editorHitMarkers = config.GetBindable<bool>(OsuSetting.EditorShowHitMarkers);
             editorAutoSeekOnPlacement = config.GetBindable<bool>(OsuSetting.EditorAutoSeekOnPlacement);
             editorLimitedDistanceSnap = config.GetBindable<bool>(OsuSetting.EditorLimitedDistanceSnap);
+            editorShowSliderSectionAngles = config.GetBindable<bool>(OsuSetting.EditorShowSliderSectionAngles);
             editorTimelineShowTimingChanges = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTimingChanges);
             editorTimelineShowBreaks = config.GetBindable<bool>(OsuSetting.EditorTimelineShowBreaks);
             editorTimelineShowTicks = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTicks);
@@ -431,6 +433,11 @@ namespace osu.Game.Screens.Edit
                                             new ToggleMenuItem(EditorStrings.LimitedDistanceSnap)
                                             {
                                                 State = { BindTarget = editorLimitedDistanceSnap },
+                                            },
+                                            new ToggleMenuItem(EditorStrings.ShowSliderSectionAngles)
+                                            {
+                                                State = { BindTarget = editorShowSliderSectionAngles },
+                                                Hotkey = new Hotkey(GlobalAction.EditorToggleSliderSectionAngles),
                                             },
                                             new ToggleMenuItem(EditorStrings.ContractSidebars)
                                             {
@@ -736,6 +743,13 @@ namespace osu.Game.Screens.Edit
 
                 case GlobalAction.EditorVerifyMode:
                     screenSwitcher.SelectItem(EditorScreenMode.Verify);
+                    return true;
+
+                case GlobalAction.EditorToggleSliderSectionAngles:
+                    if (e.Repeat)
+                        return false;
+
+                    editorShowSliderSectionAngles.Value = !editorShowSliderSectionAngles.Value;
                     return true;
 
                 case GlobalAction.EditorDiscardUnsavedChanges:

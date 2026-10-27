@@ -67,6 +67,24 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
         }
 
         [Test]
+        public void TestSectionAngleShownWhilePlacing()
+        {
+            addMovementStep(new Vector2(200));
+            addClickStep(MouseButton.Left);
+
+            addMovementStep(new Vector2(300, 100));
+            AddUntilStep("active section angle is 45°", () => visibleAngleIndicators().Select(i => i.Text), () => Is.EquivalentTo(new[] { "45°" }));
+            AddAssert("label next to section", () => visibleAngleIndicators().Single().IsCallout, () => Is.False);
+
+            addMovementStep(new Vector2(215, 200));
+            AddUntilStep("active section angle is 0°", () => visibleAngleIndicators().Select(i => i.Text), () => Is.EquivalentTo(new[] { "0°" }));
+            AddAssert("short section label is a callout", () => visibleAngleIndicators().Single().IsCallout);
+
+            addClickStep(MouseButton.Right);
+            assertPlaced(true);
+        }
+
+        [Test]
         public void TestPlaceWithMouseMovementOutsidePlayfield()
         {
             addMovementStep(new Vector2(200));
@@ -515,6 +533,9 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
             assertControlPointCount(3);
             assertFinalControlPointType(0, PathType.PERFECT_CURVE);
         }
+
+        private SliderSectionAngleOverlay.SectionAngleIndicator[] visibleAngleIndicators()
+            => this.ChildrenOfType<SliderSectionAngleOverlay.SectionAngleIndicator>().Where(i => i.IsPresent).ToArray();
 
         private void addMovementStep(Vector2 position) => AddStep($"move mouse to {position}", () => InputManager.MoveMouseTo(InputManager.ToScreenSpace(position)));
 

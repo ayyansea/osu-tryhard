@@ -99,6 +99,12 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
                 BodyPiece = new SliderBodyPiece(),
                 HeadOverlay = CreateCircleOverlay(HitObject, SliderPosition.Start),
                 TailOverlay = CreateCircleOverlay(HitObject, SliderPosition.End),
+                new SliderSectionAngleOverlay(HitObject, SliderSectionAngleMode.HoveredSections)
+                {
+                    // The skeleton of selected sliders is visible, so show angles when hovering any of its sections.
+                    // Otherwise only show them when hovering the slider itself.
+                    ShouldDisplayHoveredSections = () => IsSelected || IsHovered,
+                },
             };
 
             // tail will always have a non-null end drag marker.

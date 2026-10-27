@@ -151,6 +151,11 @@ namespace osu.Game.Localisation
         public static LocalisableString ContractSidebars => new TranslatableString(getKey(@"contract_sidebars"), @"Contract sidebars when not hovered");
 
         /// <summary>
+        /// "Show slider section angles"
+        /// </summary>
+        public static LocalisableString ShowSliderSectionAngles => new TranslatableString(getKey(@"show_slider_section_angles"), @"Show slider section angles");
+
+        /// <summary>
         /// "Must be in edit mode to handle editor links"
         /// </summary>
         public static LocalisableString MustBeInEditorToHandleLinks => new TranslatableString(getKey(@"must_be_in_editor_to_handle_links"), @"Must be in edit mode to handle editor links");

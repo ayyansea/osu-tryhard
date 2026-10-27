@@ -206,6 +206,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.EditorShowHitMarkers, true);
             SetDefault(OsuSetting.EditorAutoSeekOnPlacement, true);
             SetDefault(OsuSetting.EditorLimitedDistanceSnap, false);
+            SetDefault(OsuSetting.EditorShowSliderSectionAngles, true);
             SetDefault(OsuSetting.EditorShowSpeedChanges, false);
             SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.GridCentre);
             SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.GridCentre);
@@ -311,6 +312,12 @@ namespace osu.Game.Configuration
                             LookupKeyBindings(GlobalAction.RandomSkin))
                     );
                 }),
+                new TrackedSetting<bool>(OsuSetting.EditorShowSliderSectionAngles, state => new SettingDescription(
+                    rawValue: state,
+                    name: EditorStrings.ShowSliderSectionAngles,
+                    value: state ? CommonStrings.Enabled.ToLower() : CommonStrings.Disabled.ToLower(),
+                    shortcut: LookupKeyBindings(GlobalAction.EditorToggleSliderSectionAngles))
+                ),
                 new TrackedSetting<float>(OsuSetting.UIScale, scale => new SettingDescription(
                         rawValue: scale,
                         name: GraphicsSettingsStrings.UIScaling,
@@ -485,5 +492,7 @@ namespace osu.Game.Configuration
         /// Blocks private messages, multiplayer room invites, and duel requests from people not on the user's friends list.
         /// </summary>
         PMFriendsOnly,
+
+        EditorShowSliderSectionAngles,
     }
 }

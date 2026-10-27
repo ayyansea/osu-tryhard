@@ -80,7 +80,11 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders
                 bodyPiece = new SliderBodyPiece(),
                 headCirclePiece = new HitCirclePiece(),
                 tailCirclePiece = new HitCirclePiece(),
-                controlPointVisualiser = new PathControlPointVisualiser<Slider>(HitObject, false)
+                controlPointVisualiser = new PathControlPointVisualiser<Slider>(HitObject, false),
+                new SliderSectionAngleOverlay(HitObject, SliderSectionAngleMode.ActiveSection)
+                {
+                    CursorControlPoint = () => state == SliderPlacementState.ControlPoints ? cursor : null,
+                },
             };
 
             state = SliderPlacementState.Initial;

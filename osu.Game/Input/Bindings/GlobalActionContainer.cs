@@ -186,6 +186,7 @@ namespace osu.Game.Input.Bindings
             new KeyBinding(new[] { InputKey.Control, InputKey.L }, GlobalAction.EditorDiscardUnsavedChanges),
             new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.U }, GlobalAction.EditorSubmitBeatmap),
             new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.O }, GlobalAction.EditorEditExternally),
+            new KeyBinding(new[] { InputKey.Alt, InputKey.A }, GlobalAction.EditorToggleSliderSectionAngles),
         };
 
         private static IEnumerable<KeyBinding> editorTestPlayKeyBindings => new[]
@@ -635,6 +636,9 @@ namespace osu.Game.Input.Bindings
 
         [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.TakeAndUploadScreenshot))]
         TakeAndUploadScreeshot,
+
+        [LocalisableDescription(typeof(EditorStrings), nameof(EditorStrings.ShowSliderSectionAngles))]
+        EditorToggleSliderSectionAngles,
     }
 
     public enum GlobalActionCategory
