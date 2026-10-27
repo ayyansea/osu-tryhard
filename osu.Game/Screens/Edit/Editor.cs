@@ -1278,7 +1278,7 @@ namespace osu.Game.Screens.Edit
             yield return createDifficultyCreationMenu();
             yield return createDifficultySwitchMenu();
             yield return new OsuMenuItemSpacer();
-            yield return new EditorMenuItem(EditorStrings.DeleteDifficulty, MenuItemType.Destructive, deleteDifficulty) { Action = { Disabled = Beatmap.Value.BeatmapSetInfo.Beatmaps.Count < 2 } };
+            yield return new EditorMenuItem(EditorStrings.DeleteDifficulty, MenuItemType.Destructive, deleteDifficulty) { Action = { Disabled = groupedOrderedBeatmaps.Sum(g => g.Count()) < 2 } };
             yield return new OsuMenuItemSpacer();
 
             var save = new EditorMenuItem(WebCommonStrings.ButtonsSave, MenuItemType.Standard, () => attemptMutationOperation(Save)) { Hotkey = new Hotkey(PlatformAction.Save) };
@@ -1365,7 +1365,11 @@ namespace osu.Game.Screens.Edit
         /// <summary>
         /// Beatmaps of the currently edited set, grouped by ruleset and ordered by difficulty.
         /// </summary>
+        /// <summary>
+        /// All difficulties in the current beatmap set which can be edited (ie. whose ruleset is available), grouped by ruleset.
+        /// </summary>
         private IOrderedEnumerable<IGrouping<RulesetInfo, BeatmapInfo>> groupedOrderedBeatmaps => Beatmap.Value.BeatmapSetInfo.Beatmaps
+                                                                                                         .Where(b => b.Ruleset.Available)
                                                                                                          .OrderBy(b => b.StarRating)
                                                                                                          .GroupBy(b => b.Ruleset)
                                                                                                          .OrderBy(group => group.Key);

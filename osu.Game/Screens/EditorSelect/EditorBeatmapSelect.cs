@@ -336,7 +336,7 @@ namespace osu.Game.Screens.EditorSelect
             string[] terms = searchTextBox.Current.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
             var matching = allSets
-                           .Where(s => s.Beatmaps.Count > 0 && terms.All(t => matches(s, t)))
+                           .Where(s => s.Beatmaps.Any(IsEditable) && terms.All(t => matches(s, t)))
                            .OrderBy(s => s.Metadata.Artist, StringComparer.OrdinalIgnoreCase)
                            .ThenBy(s => s.Metadata.Title, StringComparer.OrdinalIgnoreCase)
                            .ToArray();
@@ -353,6 +353,12 @@ namespace osu.Game.Screens.EditorSelect
                 SelectedSet.Value = allSets.FirstOrDefault(s => s.ID == SelectedSet.Value.ID);
         }
 
+        /// <summary>
+        /// Whether the given difficulty can be opened in the editor.
+        /// Difficulties for rulesets which aren't available in this client (eg. other game modes) are hidden.
+        /// </summary>
+        public static bool IsEditable(BeatmapInfo beatmapInfo) => beatmapInfo.Ruleset.Available;
+
         private static bool matches(BeatmapSetInfo set, string term)
         {
             var metadata = set.Metadata;
@@ -364,7 +370,7 @@ namespace osu.Game.Screens.EditorSelect
                    || contains(metadata.Author.Username)
                    || contains(metadata.Source)
                    || contains(metadata.Tags)
-                   || set.Beatmaps.Any(b => contains(b.DifficultyName));
+                   || set.Beatmaps.Where(IsEditable).Any(b => contains(b.DifficultyName));
 
             bool contains(string? value) => value?.Contains(term, StringComparison.OrdinalIgnoreCase) == true;
         }
@@ -386,6 +392,7 @@ namespace osu.Game.Screens.EditorSelect
             selectedSetText.Text = $"{set.Metadata.Artist} - {set.Metadata.Title}";
 
             difficultyFlow.ChildrenEnumerable = set.Beatmaps
+                                                   .Where(IsEditable)
                                                    .OrderBy(b => b.Ruleset.OnlineID < 0 ? int.MaxValue : b.Ruleset.OnlineID)
                                                    .ThenBy(b => b.StarRating)
                                                    .Select(b => new DifficultyRow(b) { Action = () => OpenDifficulty(b) });

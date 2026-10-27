@@ -1,6 +1,7 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
@@ -117,7 +118,7 @@ namespace osu.Game.Screens.EditorSelect
 
             titleText.Text = $"{metadata.Artist} - {metadata.Title}";
 
-            int count = set.Beatmaps.Count;
+            int count = set.Beatmaps.Count(EditorBeatmapSelect.IsEditable);
             detailsText.Text = $"mapped by {metadata.Author.Username} · {count} {(count == 1 ? "difficulty" : "difficulties")}";
 
             bool isSelected = selectedSet.Value?.ID == set.ID;
