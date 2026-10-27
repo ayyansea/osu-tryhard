@@ -2,6 +2,19 @@
   <img width="500" alt="osu! logo" src="assets/lazer.png">
 </p>
 
+# osu!tryhard editor
+
+This fork strips osu!(lazer) down to **only the beatmap editor**:
+
+- Launching the desktop client opens a simple list of your beatmap sets and their difficulties. Pick a difficulty to open it in the editor, or create a new beatmap for any ruleset from the header.
+- Gameplay, test play (F5), song select, multiplayer, online features, beatmap submission, the toolbar and all other overlays are gone. The client never talks to osu! servers.
+- The client does not register itself as osu!: it uses its own storage folder (`osu-tryhard`), its own IPC name, its own executable name (`osu!tryhard`), and has no Discord rich presence, `osu://` / file associations, stable IPC or auto-updater. It can run alongside the official osu! client.
+- Beatmaps are imported by dragging `.osz` / `.olz` files onto the window.
+
+Run it with `dotnet run --project osu.Desktop`.
+
+The upstream osu! readme follows.
+
 # osu!
 
 [![Build status](https://github.com/ppy/osu/actions/workflows/ci.yml/badge.svg?branch=master&event=push)](https://github.com/ppy/osu/actions/workflows/ci.yml)

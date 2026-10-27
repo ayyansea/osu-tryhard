@@ -1,11 +1,7 @@
 {
   "profiles": {
-    "osu! Desktop": {
+    "osu!tryhard editor": {
       "commandName": "Project"
-    },
-    "osu! Tournament": {
-      "commandName": "Project",
-      "commandLineArgs": "--tournament"
     }
   }
 }

@@ -32,7 +32,6 @@ using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Configuration;
 using osu.Game.Database;
-using osu.Game.Extensions;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Input.Bindings;
@@ -51,9 +50,7 @@ using osu.Game.Screens.Edit.Components.Menus;
 using osu.Game.Screens.Edit.Compose;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osu.Game.Screens.Edit.Design;
-using osu.Game.Screens.Edit.GameplayTest;
 using osu.Game.Screens.Edit.Setup;
-using osu.Game.Screens.Edit.Submission;
 using osu.Game.Screens.Edit.Timing;
 using osu.Game.Screens.Edit.Verify;
 using osu.Game.Screens.OnlinePlay;
@@ -111,10 +108,6 @@ namespace osu.Game.Screens.Edit
 
         [Resolved(canBeNull: true)]
         private INotificationOverlay notifications { get; set; }
-
-        [Resolved(canBeNull: true)]
-        [CanBeNull]
-        private LoginOverlay loginOverlay { get; set; }
 
         [Resolved]
         private RealmAccess realm { get; set; }
@@ -533,28 +526,6 @@ namespace osu.Game.Screens.Edit
             Clipboard.Content.Value = state.ClipboardContent;
         });
 
-        public void TestGameplay()
-        {
-            clock.Stop();
-
-            if (HasUnsavedChanges)
-            {
-                dialogOverlay.Push(new SaveRequiredPopupDialog(() => attemptMutationOperation(() =>
-                {
-                    if (!Save()) return false;
-
-                    pushEditorPlayer();
-                    return true;
-                })));
-            }
-            else
-            {
-                pushEditorPlayer();
-            }
-
-            void pushEditorPlayer() => this.Push(new EditorPlayerLoader(this));
-        }
-
         private bool attemptMutationOperation(Func<bool> mutationOperation)
         {
             if (MutationTracker.InProgress.Value)
@@ -767,20 +738,12 @@ namespace osu.Game.Screens.Edit
                     screenSwitcher.SelectItem(EditorScreenMode.Verify);
                     return true;
 
-                case GlobalAction.EditorTestGameplay:
-                    bottomBar.TestGameplayButton.TriggerClick();
-                    return true;
-
                 case GlobalAction.EditorDiscardUnsavedChanges:
                     DiscardUnsavedChanges();
                     return true;
 
                 case GlobalAction.EditorEditExternally:
                     editExternally();
-                    return true;
-
-                case GlobalAction.EditorSubmitBeatmap:
-                    submitBeatmap();
                     return true;
 
                 // Track traversal keys.
@@ -1341,30 +1304,6 @@ namespace osu.Game.Screens.Edit
                 yield return externalEdit;
             }
 
-            bool isSetMadeOfLegacyRulesetBeatmaps = (isNewBeatmap && Ruleset.Value.IsLegacyRuleset())
-                                                    || (!isNewBeatmap && Beatmap.Value.BeatmapSetInfo.Beatmaps.All(b => b.Ruleset.IsLegacyRuleset()));
-            bool submissionAvailable = api.Endpoints.BeatmapSubmissionServiceUrl != null;
-
-            if (isSetMadeOfLegacyRulesetBeatmaps && submissionAvailable)
-            {
-                var upload = new EditorMenuItem(EditorStrings.SubmitBeatmap, MenuItemType.Standard, submitBeatmap)
-                {
-                    Hotkey = new Hotkey(GlobalAction.EditorSubmitBeatmap)
-                };
-                saveRelatedMenuItems.Add(upload);
-                yield return upload;
-            }
-
-            if (editorBeatmap.BeatmapInfo.OnlineID > 0)
-            {
-                yield return new OsuMenuItemSpacer();
-                yield return new EditorMenuItem(EditorStrings.OpenInfoPage, MenuItemType.Standard,
-                    () => (Game as OsuGame)?.OpenUrlExternally(editorBeatmap.BeatmapInfo.GetOnlineURL(api, editorBeatmap.BeatmapInfo.Ruleset)));
-                yield return new EditorMenuItem(EditorStrings.OpenDiscussionPage, MenuItemType.Standard,
-                    () => (Game as OsuGame)?.OpenUrlExternally(
-                        $@"{api.Endpoints.WebsiteUrl}/beatmapsets/{editorBeatmap.BeatmapInfo.BeatmapSet!.OnlineID}/discussion/{editorBeatmap.BeatmapInfo.OnlineID}"));
-            }
-
             yield return new OsuMenuItemSpacer();
             yield return new EditorMenuItem(CommonStrings.Exit, MenuItemType.Standard, this.Exit);
         }
@@ -1403,42 +1342,6 @@ namespace osu.Game.Screens.Edit
             {
                 this.Push(new ExternalEditScreen());
             }
-        }
-
-        private void submitBeatmap()
-        {
-            if (api.State.Value != APIState.Online)
-            {
-                loginOverlay?.Show();
-                return;
-            }
-
-            if (!editorBeatmap.HitObjects.Any())
-            {
-                notifications?.Post(new SimpleNotification
-                {
-                    Text = BeatmapSubmissionStrings.EmptyBeatmapsCannotBeSubmitted,
-                });
-                return;
-            }
-
-            if (HasUnsavedChanges)
-            {
-                dialogOverlay.Push(new SaveRequiredPopupDialog(() => attemptMutationOperation(() =>
-                {
-                    if (!Save())
-                        return false;
-
-                    startSubmission();
-                    return true;
-                })));
-            }
-            else
-            {
-                startSubmission();
-            }
-
-            void startSubmission() => this.Push(new BeatmapSubmissionScreen());
         }
 
         private void runExport(Func<BeatmapManager, Task> exportAction)

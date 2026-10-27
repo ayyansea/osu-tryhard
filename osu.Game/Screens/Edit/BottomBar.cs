@@ -12,16 +12,12 @@ using osu.Framework.Testing;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Screens.Edit.Components;
 using osu.Game.Screens.Edit.Components.Timelines.Summary;
-using osuTK;
 using osuTK.Graphics;
 
 namespace osu.Game.Screens.Edit
 {
     internal partial class BottomBar : CompositeDrawable
     {
-        public TestGameplayButton TestGameplayButton { get; private set; } = null!;
-
-        private IBindable<bool> saveInProgress = null!;
         private Bindable<bool> composerFocusMode = null!;
 
         [BackgroundDependencyLoader]
@@ -51,8 +47,7 @@ namespace osu.Game.Screens.Edit
                     {
                         new Dimension(GridSizeMode.Absolute, 150),
                         new Dimension(),
-                        new Dimension(GridSizeMode.Absolute, 220),
-                        new Dimension(GridSizeMode.Absolute, HitObjectComposer.TOOLBOX_CONTRACTED_SIZE_RIGHT),
+                        new Dimension(GridSizeMode.Absolute, 220 + HitObjectComposer.TOOLBOX_CONTRACTED_SIZE_RIGHT),
                     },
                     Content = new[]
                     {
@@ -61,18 +56,11 @@ namespace osu.Game.Screens.Edit
                             new TimeInfoContainer { RelativeSizeAxes = Axes.Both },
                             new SummaryTimeline { RelativeSizeAxes = Axes.Both },
                             new PlaybackControl { RelativeSizeAxes = Axes.Both },
-                            TestGameplayButton = new TestGameplayButton
-                            {
-                                RelativeSizeAxes = Axes.Both,
-                                Size = new Vector2(1),
-                                Action = editor.TestGameplay,
-                            }
                         },
                     }
                 }
             };
 
-            saveInProgress = editor.MutationTracker.InProgress.GetBoundCopy();
             composerFocusMode = editor.ComposerFocusMode.GetBoundCopy();
         }
 
@@ -80,7 +68,6 @@ namespace osu.Game.Screens.Edit
         {
             base.LoadComplete();
 
-            saveInProgress.BindValueChanged(_ => TestGameplayButton.Enabled.Value = !saveInProgress.Value, true);
             composerFocusMode.BindValueChanged(_ =>
             {
                 // Transforms should be kept in sync with other usages of composer focus mode.

@@ -22,9 +22,7 @@ using osu.Game.Graphics.UserInterface;
 using osu.Game.Localisation;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mania;
-using osu.Game.Rulesets.Osu;
 using osu.Game.Screens.Edit;
-using osu.Game.Screens.Edit.GameplayTest;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Select;
@@ -186,42 +184,6 @@ namespace osu.Game.Tests.Visual.Navigation
             if (commit) AddStep("commit", () => InputManager.Key(Key.Enter));
         }
 
-        [Test]
-        public void TestEditorGameplayTestAlwaysUsesOriginalRuleset()
-        {
-            prepareBeatmap();
-
-            AddStep("switch ruleset at song select", () => Game.Ruleset.Value = new ManiaRuleset().RulesetInfo);
-
-            AddStep("open editor", () => ((SoloSongSelect)Game.ScreenStack.CurrentScreen).Edit(beatmapSet.Beatmaps.First(beatmap => beatmap.Ruleset.OnlineID == 0)));
-
-            AddUntilStep("wait for editor open", () => Game.ScreenStack.CurrentScreen is Editor editor && editor.ReadyForUse);
-            AddAssert("editor ruleset is osu!", () => Game.Ruleset.Value, () => Is.EqualTo(new OsuRuleset().RulesetInfo));
-
-            AddStep("test gameplay", () => getEditor().TestGameplay());
-            AddUntilStep("wait for player", () =>
-            {
-                // notifications may fire at almost any inopportune time and cause annoying test failures.
-                // relentlessly attempt to dismiss any and all interfering overlays, which includes notifications.
-                // this is theoretically not foolproof, but it's the best that can be done here.
-                Game.CloseAllOverlays();
-                return Game.ScreenStack.CurrentScreen is EditorPlayer editorPlayer && editorPlayer.IsLoaded;
-            });
-            AddAssert("gameplay ruleset is osu!", () => Game.Ruleset.Value, () => Is.EqualTo(new OsuRuleset().RulesetInfo));
-
-            AddStep("exit to song select", () => Game.PerformFromScreen(_ => { }, typeof(SoloSongSelect).Yield()));
-            AddUntilStep("wait for song select", () => Game.ScreenStack.CurrentScreen is SoloSongSelect);
-            AddAssert("previous ruleset restored", () => Game.Ruleset.Value.Equals(new ManiaRuleset().RulesetInfo));
-        }
-
-        /// <summary>
-        /// When entering the editor, a new beatmap is created as part of the asynchronous load process.
-        /// This test ensures that in the case of an early exit from the editor (ie. while it's still loading)
-        /// doesn't leave a dangling beatmap behind.
-        ///
-        /// This may not fail 100% due to timing, but has a pretty high chance of hitting a failure so works well enough
-        /// as a test.
-        /// </summary>
         [Test]
         public void TestCancelNavigationToEditor()
         {

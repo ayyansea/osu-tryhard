@@ -20,18 +20,25 @@ namespace osu.Game.Beatmaps
 
         private readonly BeatmapDifficultyCache difficultyCache;
 
-        private readonly BeatmapUpdaterMetadataLookup metadataLookup;
+        private readonly BeatmapUpdaterMetadataLookup? metadataLookup;
 
         private const int update_queue_request_concurrency = 4;
 
         private readonly ThreadedTaskScheduler updateScheduler = new ThreadedTaskScheduler(update_queue_request_concurrency, nameof(BeatmapUpdaterMetadataLookup));
 
         public BeatmapUpdater(IWorkingBeatmapCache workingBeatmapCache, BeatmapDifficultyCache difficultyCache, IAPIProvider api, Storage storage)
+            : this(workingBeatmapCache, difficultyCache)
+        {
+            metadataLookup = new BeatmapUpdaterMetadataLookup(api, storage);
+        }
+
+        /// <summary>
+        /// Creates an updater which only performs local processing, without any online metadata lookups.
+        /// </summary>
+        public BeatmapUpdater(IWorkingBeatmapCache workingBeatmapCache, BeatmapDifficultyCache difficultyCache)
         {
             this.workingBeatmapCache = workingBeatmapCache;
             this.difficultyCache = difficultyCache;
-
-            metadataLookup = new BeatmapUpdaterMetadataLookup(api, storage);
         }
 
         public void Queue(Live<BeatmapSetInfo> beatmapSet, MetadataLookupScope lookupScope = MetadataLookupScope.LocalCacheFirst)
@@ -49,7 +56,7 @@ namespace osu.Game.Beatmaps
                 workingBeatmapCache.Invalidate(beatmapSet);
 
                 if (lookupScope != MetadataLookupScope.None)
-                    metadataLookup.Update(beatmapSet, lookupScope == MetadataLookupScope.OnlineFirst);
+                    metadataLookup?.Update(beatmapSet, lookupScope == MetadataLookupScope.OnlineFirst);
 
                 foreach (BeatmapInfo beatmap in beatmapSet.Beatmaps)
                 {
