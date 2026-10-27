@@ -190,6 +190,11 @@ namespace osu.Game.Localisation
         public static LocalisableString EditorComposeMode => new TranslatableString(getKey(@"editor_compose_mode"), @"Compose mode");
 
         /// <summary>
+        /// "Rhythm mode"
+        /// </summary>
+        public static LocalisableString EditorRhythmMode => new TranslatableString(getKey(@"editor_rhythm_mode"), @"Rhythm mode");
+
+        /// <summary>
         /// "Design mode"
         /// </summary>
         public static LocalisableString EditorDesignMode => new TranslatableString(getKey(@"editor_design_mode"), @"Design mode");

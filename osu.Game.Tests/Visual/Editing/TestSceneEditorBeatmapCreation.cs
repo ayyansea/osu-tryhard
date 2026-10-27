@@ -29,6 +29,7 @@ using osu.Game.Rulesets.Taiko;
 using osu.Game.Rulesets.Taiko.Objects;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Skinning;
 using osu.Game.Storyboards;
@@ -166,7 +167,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != firstDifficultyName;
             });
 
@@ -213,7 +214,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != previousDifficultyName;
             });
 
@@ -240,7 +241,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != previousDifficultyName;
             });
 
@@ -277,7 +278,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != firstDifficultyName;
             });
 
@@ -301,7 +302,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != firstDifficultyName;
             });
 
@@ -386,7 +387,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != originalDifficultyName;
             });
 
@@ -464,7 +465,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != originalDifficultyName;
             });
 
@@ -504,7 +505,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != "New Difficulty";
             });
 
@@ -543,7 +544,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != duplicate_difficulty_name;
             });
 
@@ -581,7 +582,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != duplicate_difficulty_name;
             });
 
@@ -619,7 +620,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName == "New Difficulty";
             });
 
@@ -650,7 +651,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName == "New Difficulty (1)";
             });
 
@@ -799,7 +800,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != currentDifficulty;
             });
             ensureEditorLoaded();

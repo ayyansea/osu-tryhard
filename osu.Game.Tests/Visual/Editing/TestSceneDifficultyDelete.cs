@@ -14,6 +14,7 @@ using osu.Game.Rulesets;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Components.Menus;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Storyboards;
 using osu.Game.Tests.Beatmaps.IO;
 using osuTK.Input;
@@ -117,7 +118,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("no next dialog", () => DialogOverlay.CurrentDialog == null);
             AddUntilStep("switched to different difficulty",
-                () => this.ChildrenOfType<EditorBeatmap>().SingleOrDefault() != null && EditorBeatmap.BeatmapInfo.ID != deletedDifficultyID);
+                () => this.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault() != null && EditorBeatmap.BeatmapInfo.ID != deletedDifficultyID);
 
             AddAssert("difficulty is unattached from set",
                 () => Beatmap.Value.BeatmapSetInfo.Beatmaps.Select(b => b.ID), () => Does.Not.Contain(deletedDifficultyID));

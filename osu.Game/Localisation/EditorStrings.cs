@@ -106,6 +106,16 @@ namespace osu.Game.Localisation
         public static LocalisableString ComposeScreen => new TranslatableString(getKey(@"compose_screen"), @"compose");
 
         /// <summary>
+        /// "rhythm"
+        /// </summary>
+        public static LocalisableString RhythmScreen => new TranslatableString(getKey(@"rhythm_screen"), @"rhythm");
+
+        /// <summary>
+        /// "Show rhythm strip"
+        /// </summary>
+        public static LocalisableString TimelineShowRhythmStrip => new TranslatableString(getKey(@"timeline_show_rhythm_strip"), @"Show rhythm strip");
+
+        /// <summary>
         /// "design"
         /// </summary>
         public static LocalisableString DesignScreen => new TranslatableString(getKey(@"design_screen"), @"design");

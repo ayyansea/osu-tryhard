@@ -48,6 +48,11 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
         /// </remarks>
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos) => timeline.ReceivePositionalInputAt(screenSpacePos);
 
+        /// <summary>
+        /// Whether hitsound sample points should be displayed (and editable) on blueprints.
+        /// </summary>
+        protected virtual bool ShowSamplePoints => true;
+
         public TimelineBlueprintContainer(HitObjectComposer composer)
             : base(composer)
         {
@@ -262,6 +267,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
             return new TimelineHitObjectBlueprint(item)
             {
                 OnDragHandled = e => hitObjectDragged = e != null,
+                ShowSamplePoints = ShowSamplePoints,
             };
         }
 
@@ -269,7 +275,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         protected override void UpdateSelectionFromDragBox(HashSet<HitObject> selectionBeforeDrag)
         {
-            Composer.BlueprintContainer.CommitIfPlacementActive();
+            Composer?.BlueprintContainer.CommitIfPlacementActive();
 
             var dragBox = (TimelineDragBox)DragBox;
             double minTime = dragBox.MinTime;
@@ -279,7 +285,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
             foreach (var hitObject in Beatmap.HitObjects.Except(SelectedItems).Where(shouldBeSelected))
             {
-                Composer.Playfield.SetKeepAlive(hitObject, true);
+                Composer?.Playfield.SetKeepAlive(hitObject, true);
                 SelectedItems.Add(hitObject);
             }
 

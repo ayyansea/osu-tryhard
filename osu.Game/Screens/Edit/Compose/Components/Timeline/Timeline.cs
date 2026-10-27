@@ -16,6 +16,7 @@ using osu.Game.Configuration;
 using osu.Game.Graphics;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Edit;
+using osu.Game.Screens.Edit.Rhythm;
 using osuTK;
 using osuTK.Input;
 
@@ -26,9 +27,32 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
     {
         private const float timeline_height = 80;
 
+        private const float rhythm_strip_height = 14;
+
         private readonly Drawable userContent;
 
         private bool alwaysShowControlPoints;
+
+        private bool showRhythmStrip;
+
+        /// <summary>
+        /// Whether the rhythm blueprint strip should be shown below the timeline (subject to user configuration).
+        /// </summary>
+        public bool ShowRhythmStrip
+        {
+            get => showRhythmStrip;
+            set
+            {
+                showRhythmStrip = value;
+                rhythmStripVisible?.TriggerChange();
+            }
+        }
+
+        [Resolved(CanBeNull = true)]
+        private EditorRhythm? rhythm { get; set; }
+
+        private TimelineRhythmStrip? rhythmStrip;
+        private Bindable<bool>? rhythmStripVisible;
 
         public bool AlwaysShowControlPoints
         {
@@ -154,6 +178,20 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                 },
             });
 
+            if (rhythm != null)
+            {
+                Add(rhythmStrip = new TimelineRhythmStrip
+                {
+                    Anchor = Anchor.BottomLeft,
+                    Origin = Anchor.BottomLeft,
+                    RelativeSizeAxes = Axes.X,
+                    Height = rhythm_strip_height,
+                    Alpha = 0,
+                });
+
+                rhythmStripVisible = config.GetBindable<bool>(OsuSetting.EditorTimelineShowRhythmStrip);
+            }
+
             waveformOpacity = config.GetBindable<float>(OsuSetting.EditorWaveformOpacity);
             controlPointsVisible = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTimingChanges);
             ticksVisible = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTicks);
@@ -191,6 +229,14 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
             waveformOpacity.BindValueChanged(_ => updateWaveformOpacity(), true);
 
             ticksVisible.BindValueChanged(visible => ticks.FadeTo(visible.NewValue ? 1 : 0, 200, Easing.OutQuint), true);
+
+            rhythmStripVisible?.BindValueChanged(_ =>
+            {
+                bool visible = showRhythmStrip && rhythmStripVisible.Value;
+
+                rhythmStrip!.Alpha = visible ? 1 : 0;
+                Height = timeline_height + (visible ? rhythm_strip_height : 0);
+            }, true);
 
             controlPointsVisible.BindValueChanged(visible =>
             {
@@ -338,6 +384,11 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
         {
             return (float)(time / editorClock.TrackLength * Content.DrawWidth);
         }
+
+        /// <summary>
+        /// Returns the screen-space position at the vertical centre of the timeline, at the given time.
+        /// </summary>
+        public Vector2 ScreenSpacePositionAtTime(double time) => Content.ToScreenSpace(new Vector2(PositionAtTime(time), Content.DrawHeight / 2));
 
         public SnapResult FindSnappedPositionAndTime(Vector2 screenSpacePosition)
         {

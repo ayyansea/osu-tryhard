@@ -50,6 +50,7 @@ using osu.Game.Screens.Edit.Components.Menus;
 using osu.Game.Screens.Edit.Compose;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osu.Game.Screens.Edit.Design;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Screens.Edit.Timing;
 using osu.Game.Screens.Edit.Verify;
@@ -93,7 +94,7 @@ namespace osu.Game.Screens.Edit
                 if (!canSave)
                     return false;
 
-                return lastSavedHash != changeHandler?.CurrentStateHash;
+                return lastSavedHash != changeHandler?.CurrentStateHash || editorRhythm?.HasUnsavedChanges == true;
             }
         }
 
@@ -213,6 +214,9 @@ namespace osu.Game.Screens.Edit
         private Bindable<bool> editorAutoSeekOnPlacement;
         private Bindable<bool> editorLimitedDistanceSnap;
         private Bindable<bool> editorShowSliderSectionAngles;
+        private Bindable<bool> editorTimelineShowRhythmStrip;
+
+        private EditorRhythm editorRhythm;
         private Bindable<bool> editorTimelineShowTimingChanges;
         private Bindable<bool> editorTimelineShowBreaks;
         private Bindable<bool> editorTimelineShowTicks;
@@ -302,6 +306,9 @@ namespace osu.Game.Screens.Edit
                 dependencies.CacheAs<IEditorChangeHandler>(changeHandler);
             }
 
+            AddInternal(editorRhythm = new EditorRhythm(editorBeatmap));
+            dependencies.Cache(editorRhythm);
+
             beatDivisor.SetArbitraryDivisor(editorBeatmap.BeatmapInfo.BeatDivisor);
             beatDivisor.BindValueChanged(divisor => editorBeatmap.BeatmapInfo.BeatDivisor = divisor.NewValue);
 
@@ -319,8 +326,6 @@ namespace osu.Game.Screens.Edit
             var bookmarkController = new BookmarkController();
             AddInternal(bookmarkController);
 
-            OsuMenuItem undoMenuItem;
-            OsuMenuItem redoMenuItem;
 
             editorBackgroundDim = config.GetBindable<float>(OsuSetting.EditorDim);
             editorShowStoryboard = config.GetBindable<bool>(OsuSetting.EditorShowStoryboard);
@@ -328,6 +333,7 @@ namespace osu.Game.Screens.Edit
             editorAutoSeekOnPlacement = config.GetBindable<bool>(OsuSetting.EditorAutoSeekOnPlacement);
             editorLimitedDistanceSnap = config.GetBindable<bool>(OsuSetting.EditorLimitedDistanceSnap);
             editorShowSliderSectionAngles = config.GetBindable<bool>(OsuSetting.EditorShowSliderSectionAngles);
+            editorTimelineShowRhythmStrip = config.GetBindable<bool>(OsuSetting.EditorTimelineShowRhythmStrip);
             editorTimelineShowTimingChanges = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTimingChanges);
             editorTimelineShowBreaks = config.GetBindable<bool>(OsuSetting.EditorTimelineShowBreaks);
             editorTimelineShowTicks = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTicks);
@@ -413,6 +419,10 @@ namespace osu.Game.Screens.Edit
                                                     {
                                                         State = { BindTarget = editorTimelineShowBreaks }
                                                     },
+                                                    new ToggleMenuItem(EditorStrings.TimelineShowRhythmStrip)
+                                                    {
+                                                        State = { BindTarget = editorTimelineShowRhythmStrip }
+                                                    },
                                                 ]
                                             },
                                             new OsuMenuItemSpacer(),
@@ -474,8 +484,34 @@ namespace osu.Game.Screens.Edit
                 }
             });
 
-            changeHandler?.CanUndo.BindValueChanged(v => undoMenuItem.Action.Disabled = !v.NewValue, true);
-            changeHandler?.CanRedo.BindValueChanged(v => redoMenuItem.Action.Disabled = !v.NewValue, true);
+            rebindUndoRedoBindables();
+        }
+
+        private OsuMenuItem undoMenuItem;
+        private OsuMenuItem redoMenuItem;
+
+        private IBindable<bool> canUndo;
+        private IBindable<bool> canRedo;
+
+        /// <summary>
+        /// The change handler which undo / redo currently applies to.
+        /// Some screens (e.g. the rhythm screen) edit something other than the beatmap, and have their own change handler.
+        /// </summary>
+        private EditorChangeHandler activeChangeHandler => currentScreen?.ChangeHandler ?? changeHandler;
+
+        private void rebindUndoRedoBindables()
+        {
+            canUndo?.UnbindAll();
+            canRedo?.UnbindAll();
+
+            if (activeChangeHandler == null)
+                return;
+
+            canUndo = activeChangeHandler.CanUndo.GetBoundCopy();
+            canRedo = activeChangeHandler.CanRedo.GetBoundCopy();
+
+            canUndo.BindValueChanged(v => undoMenuItem.Action.Disabled = !v.NewValue, true);
+            canRedo.BindValueChanged(v => redoMenuItem.Action.Disabled = !v.NewValue, true);
         }
 
         [Resolved]
@@ -572,6 +608,7 @@ namespace osu.Game.Screens.Edit
             {
                 // save the loaded beatmap's data stream.
                 beatmapManager.Save(editorBeatmap.BeatmapInfo, editorBeatmap.PlayableBeatmap, editorBeatmap.BeatmapSkin, editorBeatmap.Storyboard);
+                editorRhythm.Save();
             }
             catch (Exception ex)
             {
@@ -727,6 +764,10 @@ namespace osu.Game.Screens.Edit
 
                 case GlobalAction.EditorComposeMode:
                     screenSwitcher.SelectItem(EditorScreenMode.Compose);
+                    return true;
+
+                case GlobalAction.EditorRhythmMode:
+                    screenSwitcher.SelectItem(EditorScreenMode.Rhythm);
                     return true;
 
                 case GlobalAction.EditorDesignMode:
@@ -982,9 +1023,9 @@ namespace osu.Game.Screens.Edit
 
         #endregion
 
-        protected void Undo() => changeHandler?.RestoreState(-1);
+        protected void Undo() => activeChangeHandler?.RestoreState(-1);
 
-        protected void Redo() => changeHandler?.RestoreState(1);
+        protected void Redo() => activeChangeHandler?.RestoreState(1);
 
         protected void DiscardUnsavedChanges()
         {
@@ -1113,6 +1154,10 @@ namespace osu.Game.Screens.Edit
                         currentScreen = new ComposeScreen();
                         break;
 
+                    case EditorScreenMode.Rhythm:
+                        currentScreen = new RhythmScreen(editorRhythm);
+                        break;
+
                     case EditorScreenMode.Design:
                         currentScreen = new DesignScreen();
                         break;
@@ -1145,6 +1190,7 @@ namespace osu.Game.Screens.Edit
 
                 updateSampleDisabledState();
                 rebindClipboardBindables();
+                rebindUndoRedoBindables();
             }
         }
 
@@ -1285,6 +1331,7 @@ namespace osu.Game.Screens.Edit
         private void updateLastSavedHash()
         {
             lastSavedHash = changeHandler?.CurrentStateHash;
+            editorRhythm?.MarkSaved();
         }
 
         private IEnumerable<MenuItem> createFileMenuItems()

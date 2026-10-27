@@ -37,6 +37,11 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         public Action<DragEvent?>? OnDragHandled = null!;
 
+        /// <summary>
+        /// Whether hitsound sample points should be displayed (and editable).
+        /// </summary>
+        public bool ShowSamplePoints { get; init; } = true;
+
         [UsedImplicitly]
         private readonly Bindable<double> startTime;
 
@@ -140,6 +145,12 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
         protected override void LoadComplete()
         {
             base.LoadComplete();
+
+            if (!ShowSamplePoints)
+            {
+                samplePointPiece.Hide();
+                sampleComponents.Hide();
+            }
 
             switch (Item)
             {
@@ -282,7 +293,8 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
             // If the component is considered masked away, we'll use children to create an extended quad that encapsulates all parts of this blueprint
             // to ensure it doesn't pop in and out of existence abruptly when scrolling the timeline.
             var rect = RectangleF.Union(ScreenSpaceDrawQuad.AABBFloat, circle.ScreenSpaceDrawQuad.AABBFloat);
-            rect = RectangleF.Union(rect, samplePointPiece.ScreenSpaceDrawQuad.AABBFloat);
+            if (ShowSamplePoints)
+                rect = RectangleF.Union(rect, samplePointPiece.ScreenSpaceDrawQuad.AABBFloat);
 
             if (difficultyPointPiece != null)
                 rect = RectangleF.Union(rect, difficultyPointPiece.ScreenSpaceDrawQuad.AABBFloat);

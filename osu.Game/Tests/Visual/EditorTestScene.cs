@@ -18,6 +18,7 @@ using osu.Game.Overlays;
 using osu.Game.Overlays.Dialog;
 using osu.Game.Rulesets;
 using osu.Game.Screens.Edit;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Menu;
 using osu.Game.Skinning;
 using osu.Game.Storyboards;
@@ -30,7 +31,7 @@ namespace osu.Game.Tests.Visual
 
         protected TestEditor Editor => editorLoader.Editor;
 
-        protected EditorBeatmap EditorBeatmap => Editor.ChildrenOfType<EditorBeatmap>().Single();
+        protected EditorBeatmap EditorBeatmap => Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).Single();
         protected EditorClock EditorClock => Editor.ChildrenOfType<EditorClock>().Single();
 
         /// <summary>

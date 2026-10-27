@@ -207,6 +207,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.EditorAutoSeekOnPlacement, true);
             SetDefault(OsuSetting.EditorLimitedDistanceSnap, false);
             SetDefault(OsuSetting.EditorShowSliderSectionAngles, true);
+            SetDefault(OsuSetting.EditorTimelineShowRhythmStrip, true);
             SetDefault(OsuSetting.EditorShowSpeedChanges, false);
             SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.GridCentre);
             SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.GridCentre);
@@ -494,5 +495,7 @@ namespace osu.Game.Configuration
         PMFriendsOnly,
 
         EditorShowSliderSectionAngles,
+
+        EditorTimelineShowRhythmStrip,
     }
 }

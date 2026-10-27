@@ -14,6 +14,9 @@ namespace osu.Game.Screens.Edit
         [LocalisableDescription(typeof(EditorStrings), nameof(EditorStrings.ComposeScreen))]
         Compose,
 
+        [LocalisableDescription(typeof(EditorStrings), nameof(EditorStrings.RhythmScreen))]
+        Rhythm,
+
         [LocalisableDescription(typeof(EditorStrings), nameof(EditorStrings.DesignScreen))]
         Design,
 

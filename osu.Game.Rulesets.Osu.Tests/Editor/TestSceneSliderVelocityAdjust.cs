@@ -13,6 +13,7 @@ using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Rulesets.UI;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Edit.Timing;
 using osu.Game.Tests.Beatmaps;
 using osu.Game.Tests.Visual;
@@ -25,7 +26,7 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
     {
         private Screens.Edit.Editor? editor => Game.ScreenStack.CurrentScreen as Screens.Edit.Editor;
 
-        private EditorBeatmap editorBeatmap => editor.ChildrenOfType<EditorBeatmap>().FirstOrDefault()!;
+        private EditorBeatmap editorBeatmap => editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).FirstOrDefault()!;
 
         private EditorClock editorClock => editor.ChildrenOfType<EditorClock>().FirstOrDefault()!;
 

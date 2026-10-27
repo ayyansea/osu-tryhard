@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Configuration;
@@ -80,12 +81,34 @@ namespace osu.Game
         }
 
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(RealmAccess realm)
         {
             if (API is Drawable apiDrawable)
                 Add(apiDrawable);
 
             dependencies.CacheAs(osuLogo = new OsuLogo { Alpha = 0 });
+
+            removeObsoleteKeyBindings(realm);
+        }
+
+        /// <summary>
+        /// Removes stored key bindings for editor features which no longer exist in this client.
+        /// Without this, their keys (e.g. F5, which was used for testing gameplay) would conflict with newer default bindings.
+        /// </summary>
+        private static void removeObsoleteKeyBindings(RealmAccess realm)
+        {
+            int testGameplay = (int)GlobalAction.EditorTestGameplay;
+            int submitBeatmap = (int)GlobalAction.EditorSubmitBeatmap;
+
+            realm.Write(r =>
+            {
+                var obsolete = r.All<RealmKeyBinding>()
+                                .Where(b => b.RulesetName == null && (b.ActionInt == testGameplay || b.ActionInt == submitBeatmap))
+                                .ToArray();
+
+                foreach (var binding in obsolete)
+                    r.Remove(binding);
+            });
         }
 
         protected override void LoadComplete()

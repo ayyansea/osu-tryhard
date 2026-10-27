@@ -42,6 +42,11 @@ namespace osu.Game.Screens.Edit
         {
         }
 
+        /// <summary>
+        /// A change handler which should be used for undo / redo while this screen is active, instead of the beatmap's.
+        /// </summary>
+        public virtual EditorChangeHandler? ChangeHandler => null;
+
         #region Clipboard operations
 
         public BindableBool CanCut { get; } = new BindableBool();

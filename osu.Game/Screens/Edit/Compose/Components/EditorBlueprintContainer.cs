@@ -61,6 +61,12 @@ namespace osu.Game.Screens.Edit.Compose.Components
                 usageEventBuffer.HitObjectUsageFinished += RemoveBlueprintFor;
                 usageEventBuffer.HitObjectUsageTransferred += TransferBlueprintFor;
             }
+            else
+            {
+                // Without a composer there is no playfield to manage hitobject lifetimes, so all hitobjects get a blueprint.
+                foreach (var obj in Beatmap.HitObjects)
+                    AddBlueprintFor(obj);
+            }
         }
 
         protected override void Update()
@@ -125,7 +131,7 @@ namespace osu.Game.Screens.Edit.Compose.Components
 
         protected override void SelectAll()
         {
-            Composer.Playfield.KeepAllAlive();
+            Composer?.Playfield.KeepAllAlive();
             SelectedItems.AddRange(Beatmap.HitObjects.Except(SelectedItems).ToArray());
         }
 
@@ -138,13 +144,13 @@ namespace osu.Game.Screens.Edit.Compose.Components
             if (e.NewItems != null)
             {
                 foreach (HitObject newSelection in e.NewItems)
-                    Composer.Playfield.SetKeepAlive(newSelection, true);
+                    Composer?.Playfield.SetKeepAlive(newSelection, true);
             }
 
             if (e.OldItems != null)
             {
                 foreach (HitObject oldSelection in e.OldItems)
-                    Composer.Playfield.SetKeepAlive(oldSelection, false);
+                    Composer?.Playfield.SetKeepAlive(oldSelection, false);
             }
         }
 
@@ -152,14 +158,14 @@ namespace osu.Game.Screens.Edit.Compose.Components
         {
             base.OnBlueprintSelected(blueprint);
 
-            Composer.Playfield.SetKeepAlive(blueprint.Item, true);
+            Composer?.Playfield.SetKeepAlive(blueprint.Item, true);
         }
 
         protected override void OnBlueprintDeselected(SelectionBlueprint<HitObject> blueprint)
         {
             base.OnBlueprintDeselected(blueprint);
 
-            Composer.Playfield.SetKeepAlive(blueprint.Item, false);
+            Composer?.Playfield.SetKeepAlive(blueprint.Item, false);
         }
 
         protected override void Dispose(bool isDisposing)

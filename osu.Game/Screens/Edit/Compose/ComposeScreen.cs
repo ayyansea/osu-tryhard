@@ -67,6 +67,12 @@ namespace osu.Game.Screens.Edit.Compose
             return wrapSkinnableContent(composer);
         }
 
+        protected override void ConfigureTimeline(TimelineArea timelineArea)
+        {
+            base.ConfigureTimeline(timelineArea);
+            timelineArea.Timeline.ShowRhythmStrip = true;
+        }
+
         protected override Drawable CreateTimelineContent()
         {
             if (ruleset == null || composer == null)

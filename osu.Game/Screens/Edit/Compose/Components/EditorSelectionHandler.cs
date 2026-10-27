@@ -27,8 +27,11 @@ namespace osu.Game.Screens.Edit.Compose.Components
         [Resolved]
         protected EditorBeatmap EditorBeatmap { get; private set; } = null!;
 
-        [Resolved]
-        private HitObjectComposer composer { get; set; } = null!;
+        /// <remarks>
+        /// May be null when editing objects which don't belong to a ruleset (e.g. the rhythm blueprint).
+        /// </remarks>
+        [Resolved(CanBeNull = true)]
+        private HitObjectComposer? composer { get; set; }
 
         protected override bool ShouldQuickDelete(MouseButtonEvent e)
         {
@@ -49,6 +52,10 @@ namespace osu.Game.Screens.Edit.Compose.Components
         /// <returns>The relevant menu items.</returns>
         protected override IEnumerable<MenuItem> GetContextMenuItemsForSelection(IEnumerable<SelectionBlueprint<HitObject>> selection)
         {
+            // Hitsound and combo options are provided by the composer.
+            if (composer == null)
+                yield break;
+
             if (SelectedBlueprints.All(b => b.Item is IHasComboInformation) && composer.SelectionNewComboState != null)
             {
                 yield return new TernaryStateToggleMenuItem(EditorStrings.NewCombo)
@@ -58,11 +65,11 @@ namespace osu.Game.Screens.Edit.Compose.Components
                 };
             }
 
-            yield return new OsuMenuItem(EditorStrings.Sample) { Items = getSampleSubmenuItems().ToArray(), };
-            yield return new OsuMenuItem(EditorStrings.Bank) { Items = getBankSubmenuItems().ToArray(), };
+            yield return new OsuMenuItem(EditorStrings.Sample) { Items = getSampleSubmenuItems(composer).ToArray(), };
+            yield return new OsuMenuItem(EditorStrings.Bank) { Items = getBankSubmenuItems(composer).ToArray(), };
         }
 
-        private IEnumerable<MenuItem> getSampleSubmenuItems()
+        private IEnumerable<MenuItem> getSampleSubmenuItems(HitObjectComposer composer)
         {
             var whistle = composer.SelectionSampleStates[HitSampleInfo.HIT_WHISTLE];
             yield return new TernaryStateToggleMenuItem(whistle.Description)
@@ -86,7 +93,7 @@ namespace osu.Game.Screens.Edit.Compose.Components
             };
         }
 
-        private IEnumerable<MenuItem> getBankSubmenuItems()
+        private IEnumerable<MenuItem> getBankSubmenuItems(HitObjectComposer composer)
         {
             var auto = composer.SelectionBankStates[HitObjectComposer.HIT_BANK_AUTO];
             yield return new TernaryStateToggleMenuItem(auto.Description)
