@@ -12,6 +12,7 @@ using osu.Game.Online.Chat;
 using osu.Game.Rulesets;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Screens.Edit;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Select;
 using osu.Game.Tests.Resources;
@@ -21,7 +22,7 @@ namespace osu.Game.Tests.Visual.Editing
     public partial class TestSceneOpenEditorTimestamp : OsuGameTestScene
     {
         private Editor? editor => Game.ScreenStack.CurrentScreen as Editor;
-        private EditorBeatmap editorBeatmap => editor.ChildrenOfType<EditorBeatmap>().Single();
+        private EditorBeatmap editorBeatmap => editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).Single();
         private EditorClock editorClock => editor.ChildrenOfType<EditorClock>().Single();
 
         [Test]

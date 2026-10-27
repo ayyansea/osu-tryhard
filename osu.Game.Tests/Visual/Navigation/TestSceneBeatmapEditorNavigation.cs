@@ -23,6 +23,7 @@ using osu.Game.Localisation;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Mania;
 using osu.Game.Screens.Edit;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Screens.Menu;
 using osu.Game.Screens.Select;
@@ -346,7 +347,7 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("wait for editor open", () => Game.ScreenStack.CurrentScreen is Editor editor && editor.ReadyForUse);
         }
 
-        private EditorBeatmap getEditorBeatmap() => getEditor().ChildrenOfType<EditorBeatmap>().Single();
+        private EditorBeatmap getEditorBeatmap() => getEditor().ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).Single();
 
         private Editor getEditor() => (Editor)Game.ScreenStack.CurrentScreen;
 

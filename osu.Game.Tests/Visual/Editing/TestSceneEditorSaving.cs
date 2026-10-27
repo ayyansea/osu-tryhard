@@ -19,6 +19,7 @@ using osu.Game.Overlays.Notifications;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Screens.Edit;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Select;
 using osu.Game.Screens.Select.Filter;
 using osu.Game.Tests.Resources;
@@ -243,7 +244,7 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddUntilStep("wait for created", () =>
             {
-                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().SingleOrDefault()?.BeatmapInfo.DifficultyName;
+                string? difficultyName = Editor.ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm).SingleOrDefault()?.BeatmapInfo.DifficultyName;
                 return difficultyName != null && difficultyName != currentDifficulty;
             });
             AddUntilStep("wait for editor load", () => Editor.ReadyForUse && dialogOverlay!.IsLoaded);
