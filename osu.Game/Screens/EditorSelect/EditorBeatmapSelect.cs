@@ -48,8 +48,8 @@ namespace osu.Game.Screens.EditorSelect
         /// </summary>
         public readonly Bindable<BeatmapSetInfo?> SelectedSet = new Bindable<BeatmapSetInfo?>();
 
-        [Cached]
-        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Aquamarine);
+        [Cached(typeof(OverlayColourProvider))]
+        private readonly OverlayColourProvider colourProvider = new CatppuccinMochaColourProvider();
 
         [Resolved]
         private BeatmapManager beatmapManager { get; set; } = null!;

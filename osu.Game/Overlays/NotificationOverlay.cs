@@ -50,8 +50,8 @@ namespace osu.Game.Overlays
         [Resolved]
         private OsuGame? game { get; set; }
 
-        [Cached]
-        private OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Purple);
+        [Cached(typeof(OverlayColourProvider))]
+        private OverlayColourProvider colourProvider = new CatppuccinMochaColourProvider();
 
         public override bool ReceivePositionalInputAt(Vector2 screenSpacePos)
         {

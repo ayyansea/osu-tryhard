@@ -201,8 +201,8 @@ namespace osu.Game.Screens.Edit
         [Cached]
         public readonly EditorClipboard Clipboard = new EditorClipboard();
 
-        [Cached]
-        private readonly OverlayColourProvider colourProvider = new OverlayColourProvider(OverlayColourScheme.Aquamarine);
+        [Cached(typeof(OverlayColourProvider))]
+        private readonly OverlayColourProvider colourProvider = new CatppuccinMochaColourProvider();
 
         [Resolved(canBeNull: true)]
         private OnScreenDisplay onScreenDisplay { get; set; }

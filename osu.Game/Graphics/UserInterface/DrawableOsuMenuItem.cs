@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
-using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
@@ -15,6 +14,7 @@ using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
 using osu.Framework.Localisation;
 using osu.Game.Graphics.Sprites;
+using osu.Game.Overlays;
 using osuTK;
 using osuTK.Graphics;
 
@@ -42,7 +42,7 @@ namespace osu.Game.Graphics.UserInterface
         private void load()
         {
             BackgroundColour = Color4.Transparent;
-            BackgroundColourHover = Color4Extensions.FromHex(@"172023");
+            BackgroundColourHover = CatppuccinMochaColourProvider.SURFACE0;
 
             AddInternal(hotkey = new HotkeyDisplay
             {
@@ -99,7 +99,7 @@ namespace osu.Game.Graphics.UserInterface
                     break;
 
                 case MenuItemType.Highlighted:
-                    text.Colour = Color4Extensions.FromHex(@"ffcc22");
+                    text.Colour = CatppuccinMochaColourProvider.YELLOW;
                     break;
             }
 

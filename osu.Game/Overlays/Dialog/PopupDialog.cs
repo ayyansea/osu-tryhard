@@ -164,13 +164,13 @@ namespace osu.Game.Overlays.Dialog
                                 new Box
                                 {
                                     RelativeSizeAxes = Axes.Both,
-                                    Colour = Color4Extensions.FromHex(@"221a21"),
+                                    Colour = CatppuccinMochaColourProvider.BASE,
                                 },
                                 new Triangles
                                 {
                                     RelativeSizeAxes = Axes.Both,
-                                    ColourLight = Color4Extensions.FromHex(@"271e26"),
-                                    ColourDark = Color4Extensions.FromHex(@"1e171e"),
+                                    ColourLight = CatppuccinMochaColourProvider.SURFACE0,
+                                    ColourDark = CatppuccinMochaColourProvider.MANTLE,
                                     TriangleScale = 4,
                                 },
                                 flashLayer = new Box
@@ -178,7 +178,7 @@ namespace osu.Game.Overlays.Dialog
                                     Alpha = 0,
                                     RelativeSizeAxes = Axes.Both,
                                     Blending = BlendingParameters.Additive,
-                                    Colour = Color4Extensions.FromHex(@"221a21"),
+                                    Colour = CatppuccinMochaColourProvider.BASE,
                                 },
                             },
                         },
