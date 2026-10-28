@@ -208,6 +208,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.EditorLimitedDistanceSnap, false);
             SetDefault(OsuSetting.EditorShowSliderSectionAngles, true);
             SetDefault(OsuSetting.EditorTimelineShowRhythmStrip, true);
+            SetDefault(OsuSetting.HitsoundSamplesDirectory, string.Empty);
             SetDefault(OsuSetting.EditorShowSpeedChanges, false);
             SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.GridCentre);
             SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.GridCentre);
@@ -497,5 +498,10 @@ namespace osu.Game.Configuration
         EditorShowSliderSectionAngles,
 
         EditorTimelineShowRhythmStrip,
+
+        /// <summary>
+        /// The folder the file chooser for custom hitsound samples starts in. Empty to use the default location.
+        /// </summary>
+        HitsoundSamplesDirectory,
     }
 }

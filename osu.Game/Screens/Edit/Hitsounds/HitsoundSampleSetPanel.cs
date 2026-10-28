@@ -19,11 +19,13 @@ using osu.Framework.IO.Stores;
 using osu.Framework.Platform;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
+using osu.Game.Configuration;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Overlays;
+using osu.Game.Overlays.Notifications;
 using osu.Game.Utils;
 using osuTK;
 
@@ -46,6 +48,15 @@ namespace osu.Game.Screens.Edit.Hitsounds
         [Resolved]
         private IBindable<WorkingBeatmap> working { get; set; } = null!;
 
+        [Resolved]
+        private INotificationOverlay? notifications { get; set; }
+
+        [Resolved]
+        private OsuConfigManager config { get; set; } = null!;
+
+        private Bindable<string> samplesDirectory = null!;
+        private FolderButton folderButton = null!;
+
         private readonly Dictionary<(string bank, string name), SampleCell> cells = new Dictionary<(string, string), SampleCell>();
         private readonly Bindable<DirectoryInfo?> lastDirectory = new Bindable<DirectoryInfo?>();
 
@@ -65,10 +76,14 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 AutoSizeAxes = Axes.Y,
                 Direction = FillDirection.Vertical,
                 Spacing = new Vector2(4),
-                Child = caption = new OsuSpriteText
+                Children = new Drawable[]
                 {
-                    Font = OsuFont.GetFont(size: 12, weight: FontWeight.SemiBold),
-                    Colour = colourProvider.Content2,
+                    folderButton = new FolderButton(this) { RelativeSizeAxes = Axes.X, Height = 28 },
+                    caption = new OsuSpriteText
+                    {
+                        Font = OsuFont.GetFont(size: 12, weight: FontWeight.SemiBold),
+                        Colour = colourProvider.Content2,
+                    },
                 },
             };
 
@@ -100,6 +115,14 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
             InternalChild = rows;
 
+            samplesDirectory = config.GetBindable<string>(OsuSetting.HitsoundSamplesDirectory);
+            samplesDirectory.BindValueChanged(_ =>
+            {
+                // start from the new default folder rather than where the last file was picked.
+                lastDirectory.Value = null;
+                folderButton.UpdateText();
+            }, true);
+
             Current.BindValueChanged(_ => refresh(), true);
 
             if (editorBeatmap.BeatmapSkin != null)
@@ -126,11 +149,31 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         private string addFile(FileInfo file, string expectedFilename)
         {
+            var set = working.Value.BeatmapSetInfo;
+
+            // a sample with the same name but another extension would be left behind unused (or play instead).
+            foreach (var existing in set.Files.Where(f => Path.GetFileNameWithoutExtension(f.Filename) == expectedFilename).ToArray())
+                beatmaps.DeleteFile(set, existing);
+
+            // trimming, normalising etc. makes the sound satisfy the ranking criteria, and the result is always a wav (see HitsoundSampleProcessor).
+            if (HitsoundSampleProcessor.TryProcess(file, out byte[] wav, out var report))
+            {
+                string processedName = expectedFilename + ".wav";
+
+                using (var stream = new MemoryStream(wav))
+                    beatmaps.AddFile(set, stream, processedName);
+
+                notifications?.Post(new SimpleNotification { Text = report!.Describe(file.Name) });
+                return processedName;
+            }
+
+            // not something we can decode, so use it as it is.
             string actual = string.Concat(expectedFilename, file.Extension.ToLowerInvariant());
 
             using (var stream = file.OpenRead())
-                beatmaps.AddFile(working.Value.BeatmapSetInfo, stream, actual);
+                beatmaps.AddFile(set, stream, actual);
 
+            notifications?.Post(new SimpleNotification { Text = $"{file.Name}: couldn't read this file, so it was added without trimming or normalising." });
             return actual;
         }
 
@@ -148,6 +191,99 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 editorBeatmap.BeatmapSkin.BeatmapSkinChanged -= scheduleRefresh;
 
             base.Dispose(isDisposing);
+        }
+
+        /// <summary>
+        /// The folder the file chooser starts in, if one is set and exists.
+        /// </summary>
+        private string? defaultDirectory => Directory.Exists(samplesDirectory.Value) ? samplesDirectory.Value : null;
+
+        private partial class FolderButton : RoundedButton, IHasPopover
+        {
+            private readonly HitsoundSampleSetPanel panel;
+
+            public FolderButton(HitsoundSampleSetPanel panel)
+            {
+                this.panel = panel;
+
+                Action = () => this.ShowPopover();
+            }
+
+            public void UpdateText() => Text = string.IsNullOrEmpty(panel.samplesDirectory.Value)
+                ? "sound folder: not set (click to choose where the file chooser starts)"
+                : $"sound folder: {new DirectoryInfo(panel.samplesDirectory.Value).Name} (click to change)";
+
+            public Popover GetPopover() => new FolderPopover(panel.defaultDirectory, path => panel.samplesDirectory.Value = path);
+        }
+
+        /// <summary>
+        /// Chooses the folder which the file chooser for sound files starts in.
+        /// </summary>
+        private partial class FolderPopover : OsuPopover
+        {
+            private readonly string? current;
+            private readonly Action<string> onChosen;
+
+            public FolderPopover(string? current, Action<string> onChosen)
+                : base(false)
+            {
+                this.current = current;
+                this.onChosen = onChosen;
+            }
+
+            [BackgroundDependencyLoader]
+            private void load()
+            {
+                OsuDirectorySelector selector;
+
+                Child = new Container
+                {
+                    Size = new Vector2(600, 400),
+                    Children = new Drawable[]
+                    {
+                        new Container
+                        {
+                            RelativeSizeAxes = Axes.Both,
+                            Padding = new MarginPadding { Bottom = 44 },
+                            Child = selector = new OsuDirectorySelector(current) { RelativeSizeAxes = Axes.Both },
+                        },
+                        new FillFlowContainer
+                        {
+                            Anchor = Anchor.BottomLeft,
+                            Origin = Anchor.BottomLeft,
+                            AutoSizeAxes = Axes.Both,
+                            Direction = FillDirection.Horizontal,
+                            Spacing = new Vector2(8),
+                            Padding = new MarginPadding(8),
+                            Children = new Drawable[]
+                            {
+                                new RoundedButton
+                                {
+                                    Width = 160,
+                                    Height = 28,
+                                    Text = "use this folder",
+                                    Action = () =>
+                                    {
+                                        onChosen(selector.CurrentPath.Value.FullName);
+                                        Hide();
+                                    },
+                                },
+                                new RoundedButton
+                                {
+                                    Width = 160,
+                                    Height = 28,
+                                    Text = "don't use a folder",
+                                    Action = () =>
+                                    {
+                                        onChosen(string.Empty);
+                                        Hide();
+                                    },
+                                },
+                            },
+                        },
+                    },
+                };
+            }
         }
 
         private partial class SampleCell : OsuButton, IHasPopover, IHasContextMenu
@@ -201,7 +337,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             }
 
             public Popover? GetPopover() => ActualFilename.Value == null
-                ? new PreviewFileChooserPopover(selectedFile, LastDirectory.Value?.FullName)
+                ? new PreviewFileChooserPopover(selectedFile, LastDirectory.Value?.FullName ?? panel.defaultDirectory)
                 : null;
 
             public MenuItem[]? ContextMenuItems => ActualFilename.Value == null
@@ -221,7 +357,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
         /// </summary>
         private partial class PreviewFileChooserPopover : FormFileSelector.FileChooserPopover
         {
-            private readonly Bindable<FileInfo?> target;
+            // not the bindable itself: disposing a drawable unbinds the bindables it holds, which would unbind everything listening to it for good.
+            private readonly Action<FileInfo> useFile;
 
             [Resolved]
             private AudioManager audio { get; set; } = null!;
@@ -234,7 +371,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             public PreviewFileChooserPopover(Bindable<FileInfo?> target, string? chooserPath)
                 : base(SupportedExtensions.AUDIO_EXTENSIONS, target, chooserPath, false)
             {
-                this.target = target;
+                useFile = file => target.Value = file;
             }
 
             [BackgroundDependencyLoader]
@@ -262,7 +399,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                             {
                                 name = new TruncatingSpriteText { Width = 300, Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
                                 new RoundedButton { Width = 80, Height = 28, Text = "play", Action = play },
-                                new RoundedButton { Width = 120, Height = 28, Text = "use this file", Action = () => target.Value = pending },
+                                new RoundedButton { Width = 120, Height = 28, Text = "use this file", Action = () => useFile(pending!) },
                             },
                         },
                     },

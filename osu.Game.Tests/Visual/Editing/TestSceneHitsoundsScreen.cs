@@ -51,7 +51,7 @@ namespace osu.Game.Tests.Visual.Editing
         {
             AddStep("click the first + button", () =>
             {
-                InputManager.MoveMouseTo(Editor.ChildrenOfType<HitsoundSampleSetPanel>().Single().ChildrenOfType<OsuButton>().First());
+                InputManager.MoveMouseTo(Editor.ChildrenOfType<HitsoundSampleSetPanel>().Single().ChildrenOfType<OsuButton>().First(b => b.Text.ToString() is "+" or "play"));
                 InputManager.Click(MouseButton.Left);
             });
 
@@ -78,6 +78,28 @@ namespace osu.Game.Tests.Visual.Editing
             });
             AddUntilStep("timeline scrolled along", () => EditorClock.CurrentTime, () => Is.GreaterThan(startTime + 500));
             AddStep("release", () => InputManager.ReleaseButton(MouseButton.Left));
+        }
+
+        [Test]
+        public void TestProcessSampleFile()
+        {
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"hitsound-test-{System.Guid.NewGuid():N}.wav");
+            HitsoundSampleProcessor.Report? report = null;
+            byte[] wav = System.Array.Empty<byte>();
+
+            // 20 ms of silence followed by a quiet tone, as a plain wav file.
+            AddStep("process a file with leading silence", () =>
+            {
+                float[] samples = new float[882].Concat(Enumerable.Range(0, 4410).Select(i => 0.1f * System.MathF.Sin(i * 0.2f + 1))).ToArray();
+                System.IO.File.WriteAllBytes(path, HitsoundSampleProcessor.ToWav(samples, 1, 44100));
+
+                Assert.That(HitsoundSampleProcessor.TryProcess(new System.IO.FileInfo(path), out wav, out report), Is.True);
+            });
+
+            AddAssert("silence was trimmed", () => report!.TrimmedMs, () => Is.EqualTo(20).Within(1));
+            AddAssert("normalised", () => report!.GainDb, () => Is.GreaterThan(15));
+            AddAssert("a wav came out", () => System.Text.Encoding.ASCII.GetString(wav, 0, 4), () => Is.EqualTo("RIFF"));
+            AddStep("clean up", () => System.IO.File.Delete(path));
         }
 
         [Test]
