@@ -199,6 +199,7 @@ Reads sets from realm (`allSets`), `SelectedSet` bindable. **`BeatmapSetInfo` eq
 ## 9. Git workflow
 
 - Commit and push only when asked. Keep commits focused (separate unrelated features/fixes even if developed together).
+- **Keep this file alive.** Before committing a feature/fix that built successfully, update `AGENTS.md` in the same commit: add what you learned (new systems, files, settings, keys, gotchas, test notes), and correct or remove anything your change made outdated. Improve existing sections instead of appending duplicates; skip it only if the change genuinely taught nothing new.
 - Message style: short imperative title, bullet body explaining *what and why*. Trailer: `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`.
 - No git identity is configured in this environment; set `GIT_AUTHOR_NAME/EMAIL` and `GIT_COMMITTER_NAME/EMAIL` (`Claude` / `noreply@anthropic.com`) for the command instead of changing git config.
 - `osu.Game/OsuEditorGame.cs` has seen uncommitted changes from the maintainer in the past (moving `removeObsoleteKeyBindings` into `LoadComplete`); check `git status` and `git diff` before committing to avoid sweeping in unrelated work without saying so.
