@@ -101,7 +101,7 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
         [TestCase(-1, 0, 0)]
         [TestCase(0, 1, 90)]
         [TestCase(1, 1, 45)]
-        [TestCase(-1, -2, 63.43)]
+        [TestCase(-1, -2, 63.43f)]
         public void TestSectionAngle(float x, float y, float expected)
         {
             Assert.That(SliderSectionAngleOverlay.GetSectionAngle(Vector2.Zero, new Vector2(x, y)), Is.EqualTo(expected).Within(0.01));
