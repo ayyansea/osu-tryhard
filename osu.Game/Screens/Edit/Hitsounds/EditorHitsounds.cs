@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using osu.Framework.Allocation;
-using osu.Framework.Bindables;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
@@ -35,8 +34,6 @@ namespace osu.Game.Screens.Edit.Hitsounds
     public partial class EditorHitsounds : CompositeDrawable
     {
         public IReadOnlyList<HitsoundStep> Steps => steps;
-
-        public readonly BindableList<HitsoundStep> Selected = new BindableList<HitsoundStep>();
 
         /// <summary>
         /// The serialised steps last copied, if any.
@@ -107,7 +104,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
             if (!steps.Remove(step))
                 return;
 
-            Selected.Remove(step);
+            if (step.Samples.Aggregate(false, (any, s) => selected.Remove(s) | any))
+                SelectionChanged?.Invoke();
+
             refreshSampleSets();
             StepRemoved?.Invoke(step);
             ChangeHandler.SaveState();
@@ -136,63 +135,184 @@ namespace osu.Game.Screens.Edit.Hitsounds
             SampleSetsChanged?.Invoke();
         }
 
-        public void SelectAll()
+        #region Selection
+
+        // The selection consists of individual sounds (a sample of a step), compared by reference since equal samples in different steps are different sounds.
+        private readonly HashSet<HitSampleInfo> selected = new HashSet<HitSampleInfo>(ReferenceEqualityComparer.Instance);
+
+        public IReadOnlyCollection<HitSampleInfo> Selected => selected;
+
+        public event Action? SelectionChanged;
+
+        public bool IsSelected(HitSampleInfo sample) => selected.Contains(sample);
+
+        public void SetSelection(IEnumerable<HitSampleInfo> samples)
         {
-            Selected.Clear();
-            Selected.AddRange(steps);
+            var newSelection = samples.ToList();
+
+            if (newSelection.Count == selected.Count && newSelection.All(selected.Contains))
+                return;
+
+            selected.Clear();
+            selected.UnionWith(newSelection);
+            SelectionChanged?.Invoke();
+        }
+
+        public void SelectAll() => SetSelection(steps.SelectMany(s => s.Samples));
+
+        /// <summary>
+        /// Selects every sound in a lane.
+        /// </summary>
+        public void SelectLane(HitsoundLane lane, bool additive)
+        {
+            var inLane = steps.SelectMany(s => s.Samples).Where(lane.Matches);
+            SetSelection(additive ? selected.Concat(inLane) : inLane);
+        }
+
+        /// <summary>
+        /// Maps each sound to the step it is in, forgetting selected sounds which are gone.
+        /// </summary>
+        private Dictionary<HitSampleInfo, HitsoundStep> ownersOf()
+        {
+            var owners = new Dictionary<HitSampleInfo, HitsoundStep>(ReferenceEqualityComparer.Instance);
+
+            foreach (var step in steps)
+            {
+                foreach (var sample in step.Samples)
+                    owners[sample] = step;
+            }
+
+            if (selected.RemoveWhere(s => !owners.ContainsKey(s)) > 0)
+                SelectionChanged?.Invoke();
+
+            return owners;
+        }
+
+        private static void removeSample(HitsoundStep step, HitSampleInfo sample)
+        {
+            for (int i = 0; i < step.Samples.Count; i++)
+            {
+                if (ReferenceEquals(step.Samples[i], sample))
+                {
+                    step.Samples.RemoveAt(i);
+                    return;
+                }
+            }
+        }
+
+        private static HitsoundLane laneOf(HitSampleInfo sample) => new HitsoundLane(sample.Bank, HitsoundLane.SampleSetOf(sample.Suffix), sample.Name);
+
+        /// <summary>
+        /// Notifies about steps which were changed, removing the ones which have no sounds left.
+        /// </summary>
+        private void finishEdit(IEnumerable<HitsoundStep> touched)
+        {
+            foreach (var step in touched)
+            {
+                if (step.Samples.Count == 0)
+                    Remove(step);
+                else
+                    Update(step);
+            }
         }
 
         public void DeleteSelected()
         {
+            var owners = ownersOf();
+
             BeginChange();
 
-            foreach (var step in Selected.ToArray())
-                Remove(step);
+            var touched = new HashSet<HitsoundStep>();
+
+            foreach (var sample in selected.ToArray())
+            {
+                removeSample(owners[sample], sample);
+                touched.Add(owners[sample]);
+            }
+
+            SetSelection(Enumerable.Empty<HitSampleInfo>());
+            finishEdit(touched);
 
             EndChange();
         }
 
         /// <summary>
-        /// Moves the selected steps in time, never before 0.
+        /// Moves the selected sounds in time, never before 0. Sounds which land on a step with a sound they conflict with don't replace it until <see cref="ResolveConflicts"/>,
+        /// so moving back and forth is not destructive.
         /// </summary>
         /// <returns>The delta that was actually applied.</returns>
         public double MoveSelected(double delta)
         {
-            if (Selected.Count == 0)
+            var owners = ownersOf();
+
+            if (selected.Count == 0)
                 return 0;
 
-            delta = Math.Max(delta, -Selected.Min(s => s.StartTime));
+            delta = Math.Max(delta, -selected.Min(s => owners[s].StartTime));
 
             if (delta == 0)
                 return 0;
 
-            foreach (var step in Selected)
-                step.StartTime += delta;
+            var touched = new HashSet<HitsoundStep>();
 
-            steps.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+            foreach (var sample in selected.ToArray())
+            {
+                var from = owners[sample];
+                double time = from.StartTime + delta;
 
-            foreach (var step in Selected.ToArray())
-                StepUpdated?.Invoke(step);
+                var to = FindStep(time);
 
-            ChangeHandler.SaveState();
+                if (to == null)
+                {
+                    to = new HitsoundStep { StartTime = time };
+                    Add(to);
+                }
+
+                removeSample(from, sample);
+                to.Samples.Add(sample);
+
+                touched.Add(from);
+                touched.Add(to);
+            }
+
+            finishEdit(touched);
             return delta;
         }
 
         /// <summary>
-        /// Removes unselected steps which a moved selection landed on.
+        /// Removes unselected sounds which the selected sounds can't be saved together with (or duplicate).
         /// </summary>
-        public void ResolveCollisions()
+        public void ResolveConflicts()
         {
-            var times = Selected.Select(s => Math.Round(s.StartTime)).ToHashSet();
+            var owners = ownersOf();
+            var touched = new HashSet<HitsoundStep>();
 
-            foreach (var step in steps.Where(s => !Selected.Contains(s) && times.Contains(Math.Round(s.StartTime))).ToArray())
-                Remove(step);
+            foreach (var sample in selected)
+            {
+                var step = owners[sample];
+                var lane = laneOf(sample);
+
+                foreach (var other in step.Samples.Where(s => !selected.Contains(s) && (lane.Matches(s) || lane.ConflictsWith(s))).ToArray())
+                {
+                    removeSample(step, other);
+                    touched.Add(step);
+                }
+            }
+
+            finishEdit(touched);
         }
 
-        public void CopySelected() => Clipboard = Selected.Count == 0 ? null : HitsoundSerializer.Write(Selected);
+        public void CopySelected()
+        {
+            var owners = ownersOf();
+
+            Clipboard = selected.Count == 0
+                ? null
+                : HitsoundSerializer.Write(selected.GroupBy(s => owners[s]).Select(g => new HitsoundStep { StartTime = g.Key.StartTime, Samples = g.Select(s => s.With()).ToList() }));
+        }
 
         /// <summary>
-        /// Pastes the clipboard with its first step at <paramref name="time"/>, replacing steps at the same times.
+        /// Pastes the clipboard with its first step at <paramref name="time"/>, adding to the steps there (and replacing conflicting sounds).
         /// </summary>
         public void Paste(double time)
         {
@@ -205,26 +325,41 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 return;
 
             double offset = time - pasted.Min(s => s.StartTime);
+            var added = new List<HitSampleInfo>();
 
             BeginChange();
 
-            foreach (var step in pasted)
+            foreach (var source in pasted)
             {
-                step.StartTime += offset;
+                double at = source.StartTime + offset;
+                var target = FindStep(at);
 
-                var existing = FindStep(step.StartTime);
+                if (target == null)
+                {
+                    target = new HitsoundStep { StartTime = at };
+                    Add(target);
+                }
 
-                if (existing != null)
-                    Remove(existing);
+                foreach (var sample in source.Samples)
+                {
+                    var lane = laneOf(sample);
 
-                Add(step);
+                    foreach (var other in target.Samples.Where(s => !added.Contains(s) && (lane.Matches(s) || lane.ConflictsWith(s))).ToArray())
+                        removeSample(target, other);
+
+                    target.Samples.Add(sample);
+                    added.Add(sample);
+                }
+
+                Update(target);
             }
 
-            Selected.Clear();
-            Selected.AddRange(pasted);
+            SetSelection(added);
 
             EndChange();
         }
+
+        #endregion
 
         /// <summary>
         /// Notifies that the samples of a step were changed.
@@ -237,7 +372,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         public void Replace(IEnumerable<HitsoundStep> newSteps)
         {
-            Selected.Clear();
+            SetSelection(Enumerable.Empty<HitSampleInfo>());
 
             foreach (var step in steps.ToArray())
                 StepRemoved?.Invoke(step);
@@ -392,7 +527,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
     /// <summary>
     /// Reads and writes hitsound tracks in a simple line-based text format.
-    /// Each line is "time|name,bank,suffix,volume,autobank|..." with one entry per sample.
+    /// Each line is "time|name,bank,suffix,volume,autobank,usebeatmapsamples|..." with one entry per sample.
     /// </summary>
     public static class HitsoundSerializer
     {
@@ -408,7 +543,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 sb.Append(step.StartTime.ToString(CultureInfo.InvariantCulture));
 
                 foreach (var s in step.Samples)
-                    sb.Append('|').Append(string.Join(',', s.Name, s.Bank, s.Suffix, s.Volume, s.EditorAutoBank ? 1 : 0));
+                    sb.Append('|').Append(string.Join(',', s.Name, s.Bank, s.Suffix, s.Volume, s.EditorAutoBank ? 1 : 0, s.UseBeatmapSamples ? 1 : 0));
 
                 sb.Append('\n');
             }
@@ -433,8 +568,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 {
                     string[] f = part.Split(',');
 
-                    if (f.Length == 5 && int.TryParse(f[3], out int volume))
-                        step.Samples.Add(new HitSampleInfo(f[0], f[1], f[2].Length == 0 ? null : f[2], volume, f[4] == "1"));
+                    if (f.Length >= 5 && int.TryParse(f[3], out int volume))
+                        // older files don't have the beatmap samples flag, and always meant to use them.
+                        step.Samples.Add(new HitSampleInfo(f[0], f[1], f[2].Length == 0 ? null : f[2], volume, f[4] == "1", f.Length < 6 || f[5] == "1"));
                 }
 
                 steps.Add(step);

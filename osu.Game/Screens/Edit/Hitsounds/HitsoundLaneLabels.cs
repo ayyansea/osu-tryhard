@@ -15,13 +15,15 @@ using osuTK;
 namespace osu.Game.Screens.Edit.Hitsounds
 {
     /// <summary>
-    /// Names the visible swimlanes next to the grid. Clicking a label previews its sample, scrolling over the labels scrolls through the sections.
+    /// Names the visible swimlanes next to the grid. Clicking a label previews its sample, double clicking selects every sound in the lane (ctrl / shift adds to the selection),
+    /// and scrolling over the labels scrolls through the sections.
     /// </summary>
     public partial class HitsoundLaneLabels : CompositeDrawable
     {
         public const float WIDTH = 150;
 
         private readonly HitsoundLayout layout;
+        private readonly EditorHitsounds hitsounds;
 
         [Resolved]
         private EditorBeatmap editorBeatmap { get; set; } = null!;
@@ -29,9 +31,10 @@ namespace osu.Game.Screens.Edit.Hitsounds
         private SkinnableSound preview = null!;
         private Container rows = null!;
 
-        public HitsoundLaneLabels(HitsoundLayout layout)
+        public HitsoundLaneLabels(HitsoundLayout layout, EditorHitsounds hitsounds)
         {
             this.layout = layout;
+            this.hitsounds = hitsounds;
 
             Size = new Vector2(WIDTH, HitsoundLayout.HEIGHT);
         }
@@ -57,7 +60,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             {
                 var captured = lane;
 
-                rows.Add(new ClickableContainer
+                rows.Add(new LaneLabel(e => hitsounds.SelectLane(captured, e.ControlPressed || e.ShiftPressed))
                 {
                     RelativeSizeAxes = Axes.X,
                     Height = HitsoundLayout.ROW_HEIGHT,
@@ -84,6 +87,22 @@ namespace osu.Game.Screens.Edit.Hitsounds
         {
             layout.SectionOffset.Value -= e.ScrollDelta.Y > 0 ? 1 : -1;
             return true;
+        }
+
+        private partial class LaneLabel : ClickableContainer
+        {
+            private readonly System.Action<DoubleClickEvent> onDoubleClick;
+
+            public LaneLabel(System.Action<DoubleClickEvent> onDoubleClick)
+            {
+                this.onDoubleClick = onDoubleClick;
+            }
+
+            protected override bool OnDoubleClick(DoubleClickEvent e)
+            {
+                onDoubleClick(e);
+                return true;
+            }
         }
 
         protected override void Dispose(bool isDisposing)

@@ -173,7 +173,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                     new Container
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        Child = new HitsoundLaneLabels(layout)
+                                        Child = new HitsoundLaneLabels(layout, hitsounds)
                                         {
                                             Anchor = Anchor.Centre,
                                             Origin = Anchor.Centre,
@@ -201,7 +201,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 selectButton.BackgroundColour = selectMode.Value ? CatppuccinMochaColourProvider.MAUVE.Darken(0.4f) : CatppuccinMochaColourProvider.SURFACE1;
             }, true);
 
-            hitsounds.Selected.BindCollectionChanged((_, _) => updateClipboardActionAvailability(), true);
+            hitsounds.SelectionChanged += updateClipboardActionAvailability;
+            updateClipboardActionAvailability();
 
             hitsounds.SampleSetsChanged += updateLayoutSampleSets;
             updateLayoutSampleSets();
@@ -219,7 +220,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
 
             legend.AddText("paint tool (2): click or drag in a lane (snaps to the beat divisor) to place or erase that sound, right click deletes a step.\n" +
-                           "select tool (1): click a step, ctrl / shift click to add, drag empty space to box select, drag a selected step to move the selection, delete to delete, ctrl+a / x / c / v.\n" +
+                           "select tool (1): click a sound, ctrl / shift click to add, drag to box select the sounds of the lanes the box covers, double click a lane name to select its whole lane, drag a selected sound to move the selection, delete to delete, ctrl+a / x / c / v.\n" +
                            "scroll over the lane names (or use lanes up / down) to see other banks and sample sets, click a lane name to hear it. play the track to audition.\n" +
                            "steps are independent of hit objects. \"apply to hit objects\" assigns them to objects at the same time (steps with no object are dropped); \"import\" replaces the steps with the objects' current samples.");
         }
@@ -341,6 +342,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
         protected override void Dispose(bool isDisposing)
         {
             hitsounds.SampleSetsChanged -= updateLayoutSampleSets;
+            hitsounds.SelectionChanged -= updateClipboardActionAvailability;
 
             if (EditorBeatmap.IsNotNull() && EditorBeatmap.BeatmapSkin != null)
                 EditorBeatmap.BeatmapSkin.BeatmapSkinChanged -= scheduleRegisterSampleSets;

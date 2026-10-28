@@ -33,6 +33,7 @@ namespace osu.Game.Rulesets.Osu.Tests
             var moment = HitsoundEditing.GetMoments(circle).Single();
 
             Assert.That(HitsoundEditing.SetLane(moment, soft_normal, true), Is.True);
+            Assert.That(circle.Samples.Single().UseBeatmapSamples, Is.True);
             Assert.That(HitsoundEditing.SetLane(moment, soft_normal, true), Is.False);
 
             
@@ -128,7 +129,7 @@ namespace osu.Game.Rulesets.Osu.Tests
         [Test]
         public void TestSerializerRoundTrip()
         {
-            var step = new HitsoundStep { StartTime = 1234.5, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT, "2"), new HitSampleInfo(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_DRUM, null, 80, false) } };
+            var step = new HitsoundStep { StartTime = 1234.5, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT, "2"), new HitSampleInfo(HitSampleInfo.HIT_CLAP, HitSampleInfo.BANK_DRUM, null, 80, false, true) } };
 
             var read = HitsoundSerializer.Read(HitsoundSerializer.Write(new[] { step })).Single();
 
@@ -137,25 +138,46 @@ namespace osu.Game.Rulesets.Osu.Tests
         }
 
         [Test]
-        public void TestMovePasteDelete()
+        public void TestLaneSelectionMovePasteDelete()
         {
+            var normal_normal = new HitsoundLane(HitSampleInfo.BANK_NORMAL, 1, HitsoundLayout.NAMES[0]);
+            var normal_clap = new HitsoundLane(HitSampleInfo.BANK_NORMAL, 1, HitSampleInfo.HIT_CLAP);
+
             var hitsounds = new EditorHitsounds(null!);
-            var a = new HitsoundStep { StartTime = 100, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL) } };
-            var b = new HitsoundStep { StartTime = 300, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_DRUM) } };
+            var a = new HitsoundStep { StartTime = 100, Samples = { soft_normal.Create(), normal_clap.Create() } };
+            var b = new HitsoundStep { StartTime = 300, Samples = { soft_normal.Create() } };
             hitsounds.Add(a);
             hitsounds.Add(b);
 
-            hitsounds.SelectAll();
-            Assert.That(hitsounds.MoveSelected(-500), Is.EqualTo(-100)); // clamped at 0
-            Assert.That(new[] { a.StartTime, b.StartTime }, Is.EqualTo(new[] { 0.0, 200.0 }));
+            // only the sounds of one lane, even though the first step has more.
+            hitsounds.SelectLane(soft_normal, false);
+            Assert.That(hitsounds.Selected, Has.Count.EqualTo(2));
+
+            // the first kick lands on 0 (clamped), the other moves with it, and the clap stays.
+            Assert.That(hitsounds.MoveSelected(-500), Is.EqualTo(-100));
+            Assert.That(hitsounds.Steps.Select(s => s.StartTime), Is.EqualTo(new[] { 0.0, 100.0, 200.0 }));
+            Assert.That(hitsounds.Steps[1].Samples.Select(s => s.Name), Is.EqualTo(new[] { HitSampleInfo.HIT_CLAP }));
 
             hitsounds.CopySelected();
             hitsounds.Paste(1000);
-            Assert.That(hitsounds.Steps.Select(s => s.StartTime), Is.EqualTo(new[] { 0.0, 200.0, 1000.0, 1200.0 }));
+            Assert.That(hitsounds.Steps.Select(s => s.StartTime), Is.EqualTo(new[] { 0.0, 100.0, 200.0, 1000.0, 1200.0 }));
             Assert.That(hitsounds.Selected, Has.Count.EqualTo(2));
 
             hitsounds.DeleteSelected();
-            Assert.That(hitsounds.Steps, Has.Count.EqualTo(2));
+            Assert.That(hitsounds.Steps, Has.Count.EqualTo(3));
+            Assert.That(hitsounds.Selected, Is.Empty);
+
+            // moving over another sound doesn't remove it until the move is finished, then the selected sound wins.
+            var other = new HitsoundStep { StartTime = 300, Samples = { normal_normal.Create() } };
+            hitsounds.Add(other);
+            hitsounds.SelectLane(soft_normal, false);
+            hitsounds.MoveSelected(100);
+            Assert.That(hitsounds.Steps.Single(s => s.StartTime == 300).Samples, Has.Count.EqualTo(2));
+            hitsounds.MoveSelected(-100);
+            Assert.That(other.Samples, Has.Count.EqualTo(1));
+            hitsounds.MoveSelected(100);
+            hitsounds.ResolveConflicts();
+            Assert.That(hitsounds.Steps.Single(s => s.StartTime == 300).Samples.Single().Bank, Is.EqualTo(HitSampleInfo.BANK_SOFT));
         }
 
         /// <summary>

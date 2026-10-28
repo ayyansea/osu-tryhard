@@ -39,7 +39,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                                               || SampleSetOf(sample.Suffix) != SampleSet
                                                               || (Name != HitSampleInfo.HIT_NORMAL && sample.Name != HitSampleInfo.HIT_NORMAL && sample.Bank != Bank));
 
-        public HitSampleInfo Create() => new HitSampleInfo(Name, Bank, SuffixOf(SampleSet), editorAutoBank: false);
+        // sets are looked up in the beatmap's own files first, which is what makes custom sample files play.
+        public HitSampleInfo Create() => new HitSampleInfo(Name, Bank, SuffixOf(SampleSet), editorAutoBank: false, useBeatmapSamples: true);
 
         public string Label => $"{Bank} {Name.Replace("hit", string.Empty)}{(SampleSet >= 2 ? $" #{SampleSet}" : string.Empty)}";
     }

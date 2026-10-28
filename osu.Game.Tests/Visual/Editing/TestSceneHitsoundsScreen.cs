@@ -6,6 +6,8 @@ using NUnit.Framework;
 using osu.Framework.Input;
 using osu.Framework.Testing;
 using osu.Game.Audio;
+using osu.Game.Graphics.UserInterface;
+using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Rulesets;
@@ -42,6 +44,40 @@ namespace osu.Game.Tests.Visual.Editing
             AddStep("switch to hitsounds screen", () => InputManager.Key(Key.F7));
             AddUntilStep("grid and labels loaded", () => Editor.ChildrenOfType<HitsoundPatternEditor>().SingleOrDefault()?.IsLoaded == true
                                                          && Editor.ChildrenOfType<HitsoundLaneLabels>().SingleOrDefault()?.IsLoaded == true);
+        }
+
+        [Test]
+        public void TestAddSampleOpensFileChooser()
+        {
+            AddStep("click the first + button", () =>
+            {
+                InputManager.MoveMouseTo(Editor.ChildrenOfType<HitsoundSampleSetPanel>().Single().ChildrenOfType<OsuButton>().First());
+                InputManager.Click(MouseButton.Left);
+            });
+
+            AddUntilStep("file chooser with preview shown", () => Editor.ChildrenOfType<FormFileSelector.FileChooserPopover>().Any(p => p.IsLoaded));
+        }
+
+        [Test]
+        public void TestBoxSelectScrollsTimeline()
+        {
+            double startTime = 0;
+
+            AddStep("select tool", () => InputManager.Key(Key.Number1));
+            AddStep("remember time", () => startTime = EditorClock.CurrentTime);
+            AddStep("start a box in the middle of the timeline", () =>
+            {
+                var timeline = Editor.ChildrenOfType<HitsoundsScreen>().Single().ChildrenOfType<Timeline>().Single();
+                InputManager.MoveMouseTo(new Vector2(timeline.ScreenSpaceDrawQuad.Centre.X, pattern.ToScreenSpace(Vector2.Zero).Y + HitsoundLayout.ROW_HEIGHT / 2));
+                InputManager.PressButton(MouseButton.Left);
+            });
+            AddStep("drag to the right edge", () =>
+            {
+                var timeline = Editor.ChildrenOfType<HitsoundsScreen>().Single().ChildrenOfType<Timeline>().Single();
+                InputManager.MoveMouseTo(new Vector2(timeline.ScreenSpaceDrawQuad.TopRight.X - 5, pattern.ToScreenSpace(Vector2.Zero).Y + HitsoundLayout.ROW_HEIGHT / 2));
+            });
+            AddUntilStep("timeline scrolled along", () => EditorClock.CurrentTime, () => Is.GreaterThan(startTime + 500));
+            AddStep("release", () => InputManager.ReleaseButton(MouseButton.Left));
         }
 
         [Test]

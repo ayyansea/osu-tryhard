@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Collections.Specialized;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
@@ -15,6 +14,7 @@ using osu.Framework.Input.Events;
 using osu.Game.Audio;
 using osu.Game.Overlays;
 using osu.Game.Rulesets.Edit;
+using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osu.Game.Screens.Edit.Components.Timelines.Summary.Parts;
 using osu.Game.Skinning;
 using osuTK;
@@ -47,6 +47,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
         [Resolved]
         private IBeatSnapProvider beatSnap { get; set; } = null!;
 
+        [Resolved]
+        private Timeline timeline { get; set; } = null!;
+
         private readonly Dictionary<HitsoundStep, MomentColumn> columns = new Dictionary<HitsoundStep, MomentColumn>();
         private List<MomentColumn>? sortedCache;
 
@@ -67,6 +70,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
         private int poolIndex;
         private double lastTime;
 
+        private bool dragging;
         private bool painting;
         private bool targetOn;
         private HitsoundLane targetLane;
@@ -77,7 +81,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
         private double moveAnchor;
         private bool boxing;
         private double boxStart;
-        private HashSet<HitsoundStep> boxBase = new HashSet<HitsoundStep>();
+        private float boxStartY;
+        private HashSet<HitSampleInfo> boxBase = new HashSet<HitSampleInfo>(ReferenceEqualityComparer.Instance);
 
         public HitsoundPatternEditor(EditorHitsounds hitsounds, HitsoundLayout layout, BindableBool selectMode)
         {
@@ -131,7 +136,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             hitsounds.StepAdded += addColumn;
             hitsounds.StepRemoved += removeColumn;
             hitsounds.StepUpdated += updateColumn;
-            hitsounds.Selected.CollectionChanged += onSelectionChanged;
+            hitsounds.SelectionChanged += onSelectionChanged;
             layout.Changed += onLayoutChanged;
 
             onLayoutChanged();
@@ -159,7 +164,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         private void addColumn(HitsoundStep step)
         {
-            var column = new MomentColumn(HitsoundEditing.GetMoments(step).Single(), layout);
+            var column = new MomentColumn(HitsoundEditing.GetMoments(step).Single(), layout, hitsounds.IsSelected);
             columns[step] = column;
             Content.Add(column);
             sortedCache = null;
@@ -183,12 +188,11 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 column.UpdateMoment(HitsoundEditing.GetMoments(step).Single());
         }
 
-        private void onSelectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        private void onSelectionChanged()
         {
-            var selected = hitsounds.Selected.ToHashSet();
-
-            foreach ((var step, var column) in columns)
-                column.SetSelected(selected.Contains(step));
+            // ponytail: refreshes every column, fine for a few thousand steps.
+            foreach (var column in columns.Values)
+                column.Refresh();
         }
 
         protected override void Update()
@@ -210,6 +214,11 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
             if (over)
                 ghost.X = (float)snappedTimeAt(mouse.X);
+
+            if (dragging)
+                continueDrag(mouse);
+            else
+                dragTimeAccumulated = 0;
         }
 
         private void audition(double from, double to)
@@ -352,85 +361,131 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         private bool beginSelect(MouseDownEvent e)
         {
-            var column = columnNear(e.ScreenSpaceMousePosition.X);
             bool additive = e.ControlPressed || e.ShiftPressed;
-            var selected = hitsounds.Selected;
 
-            if (column != null)
+            // clicking a sound selects (and starts moving) just that sound.
+            if (tryGetLane(e.ScreenSpaceMouseDownPosition, out var lane))
             {
-                var step = (HitsoundStep)column.Moment.Object;
+                var column = columnNear(e.ScreenSpaceMousePosition.X);
+                var sample = column?.Moment.Samples.FirstOrDefault(lane.Matches);
 
-                if (selected.Contains(step) && additive)
+                if (column != null && sample != null)
                 {
-                    selected.Remove(step);
+                    if (hitsounds.IsSelected(sample))
+                    {
+                        if (additive)
+                        {
+                            hitsounds.SetSelection(hitsounds.Selected.Where(s => !ReferenceEquals(s, sample)));
+                            return true;
+                        }
+                    }
+                    else
+                        hitsounds.SetSelection(additive ? hitsounds.Selected.Append(sample) : new[] { sample });
+
+                    Preview(lane);
+
+                    hitsounds.BeginChange();
+                    moving = true;
+                    moveAnchor = column.Moment.Time;
                     return true;
                 }
-
-                if (!selected.Contains(step))
-                {
-                    if (!additive)
-                        selected.Clear();
-
-                    selected.Add(step);
-                }
-
-                hitsounds.BeginChange();
-                moving = true;
-                moveAnchor = column.Moment.Time;
-                return true;
             }
 
-            if (!additive)
-                selected.Clear();
-
+            // anything else starts a box, which selects the sounds of the lanes it covers within its time range.
             boxing = true;
             boxStart = timeAtScreenX(e.ScreenSpaceMousePosition.X);
-            boxBase = selected.ToHashSet();
-            updateBox(boxStart);
+            boxStartY = Content.ToLocalSpace(e.ScreenSpaceMousePosition).Y;
+            boxBase = new HashSet<HitSampleInfo>(additive ? hitsounds.Selected : Enumerable.Empty<HitSampleInfo>(), ReferenceEqualityComparer.Instance);
+            updateBox(e.ScreenSpaceMousePosition);
             selectionBox.Alpha = 0.2f;
             return true;
         }
 
-        private void updateBox(double time)
+        private void updateBox(Vector2 screenSpacePosition)
         {
+            double time = timeAtScreenX(screenSpacePosition.X);
+            float y = Content.ToLocalSpace(screenSpacePosition).Y;
+
             double lo = Math.Min(boxStart, time), hi = Math.Max(boxStart, time);
+            float yLo = Math.Min(boxStartY, y), yHi = Math.Max(boxStartY, y);
 
             selectionBox.X = (float)lo;
             selectionBox.Width = (float)(hi - lo);
+            selectionBox.Y = yLo;
+            selectionBox.Height = yHi - yLo;
 
-            hitsounds.Selected.Clear();
-            hitsounds.Selected.AddRange(hitsounds.Steps.Where(s => boxBase.Contains(s) || (s.StartTime >= lo && s.StartTime <= hi)));
+            var lanes = layout.Rows.Where(r => r.Y + HitsoundLayout.ROW_HEIGHT > yLo && r.Y < yHi).Select(r => r.Lane).ToHashSet();
+
+            hitsounds.SetSelection(boxBase.Concat(hitsounds.Steps
+                                                           .Where(s => s.StartTime >= lo && s.StartTime <= hi)
+                                                           .SelectMany(s => s.Samples)
+                                                           .Where(s => lanes.Contains(new HitsoundLane(s.Bank, HitsoundLane.SampleSetOf(s.Suffix), s.Name)))));
         }
 
-        protected override bool OnDragStart(DragStartEvent e) => painting || moving || boxing;
+        protected override bool OnDragStart(DragStartEvent e) => dragging = painting || moving || boxing;
 
-        protected override void OnDrag(DragEvent e)
+        // the drag is continued every frame rather than on mouse movement, so that it keeps following the cursor while the timeline scrolls underneath it.
+        private void continueDrag(Vector2 mouse)
         {
+            handleScrollViaDrag(mouse);
+
             if (moving)
+                moveAnchor += hitsounds.MoveSelected(snappedTimeAt(mouse.X) - moveAnchor);
+            else if (boxing)
+                updateBox(mouse);
+            else if (painting)
             {
-                moveAnchor += hitsounds.MoveSelected(snappedTimeAt(e.ScreenSpaceMousePosition.X) - moveAnchor);
+                double time = snappedTimeAt(mouse.X);
+
+                foreach (double t in paintTimesBetween(lastPaintTime, time).ToList())
+                    paint(t);
+
+                lastPaintTime = time;
+            }
+        }
+
+        private float dragTimeAccumulated;
+
+        private void handleScrollViaDrag(Vector2 screenSpaceMouse)
+        {
+            // The amount of time dragging before we reach maximum drag speed.
+            const float time_ramp_multiplier = 5000;
+
+            // A maximum drag speed to ensure things don't get out of hand.
+            const float max_velocity = 10;
+
+            // like in the compose timeline, don't require the user to drag all the way to (or beyond) the edge.
+            const float scroll_tolerance = 40;
+
+            var mousePos = timeline.ToLocalSpace(screenSpaceMouse);
+
+            float leftBound = timeline.BoundingBox.TopLeft.X + scroll_tolerance;
+            float rightBound = timeline.BoundingBox.TopRight.X - scroll_tolerance;
+
+            float amount = 0;
+
+            if (mousePos.X > rightBound)
+                amount = mousePos.X - rightBound;
+            else if (mousePos.X < leftBound)
+                amount = mousePos.X - leftBound;
+
+            if (amount == 0)
+            {
+                dragTimeAccumulated = 0;
                 return;
             }
 
-            if (boxing)
-            {
-                updateBox(timeAtScreenX(e.ScreenSpaceMousePosition.X));
-                return;
-            }
+            amount = Math.Sign(amount) * Math.Min(max_velocity, MathF.Pow(Math.Clamp(Math.Abs(amount), 0, scroll_tolerance), 2));
+            dragTimeAccumulated += (float)Clock.ElapsedFrameTime;
 
-            if (!painting)
-                return;
-
-            double time = snappedTimeAt(e.ScreenSpaceMousePosition.X);
-
-            foreach (double t in paintTimesBetween(lastPaintTime, time).ToList())
-                paint(t);
-
-            lastPaintTime = time;
+            timeline.ScrollBy(amount * (float)Clock.ElapsedFrameTime * Math.Min(1, dragTimeAccumulated / time_ramp_multiplier));
         }
 
         protected override void OnMouseUp(MouseUpEvent e)
         {
+            if (e.Button == MouseButton.Left)
+                dragging = false;
+
             if (painting && e.Button == MouseButton.Left)
             {
                 painting = false;
@@ -440,7 +495,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             if (moving && e.Button == MouseButton.Left)
             {
                 moving = false;
-                hitsounds.ResolveCollisions();
+                hitsounds.ResolveConflicts();
                 hitsounds.EndChange();
             }
 
@@ -495,7 +550,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 hitsounds.StepAdded -= addColumn;
                 hitsounds.StepRemoved -= removeColumn;
                 hitsounds.StepUpdated -= updateColumn;
-                hitsounds.Selected.CollectionChanged -= onSelectionChanged;
+                hitsounds.SelectionChanged -= onSelectionChanged;
             }
         }
 
@@ -507,26 +562,21 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
             private readonly HitsoundLayout layout;
             private readonly Box[] cells;
-            private readonly Box outline;
+            private readonly Box[] outlines;
+            private readonly Func<HitSampleInfo, bool> isSelected;
             private readonly Box warning;
 
-            public MomentColumn(HitMoment moment, HitsoundLayout layout)
+            public MomentColumn(HitMoment moment, HitsoundLayout layout, Func<HitSampleInfo, bool> isSelected)
             {
                 Moment = moment;
                 this.layout = layout;
+                this.isSelected = isSelected;
 
                 RelativePositionAxes = Axes.X;
                 X = (float)moment.Time;
                 Origin = Anchor.TopCentre;
                 Size = new Vector2(CELL_WIDTH, HitsoundLayout.HEIGHT);
 
-                AddInternal(outline = new Box
-                {
-                    Position = new Vector2(-2),
-                    Size = new Vector2(CELL_WIDTH + 4, HitsoundLayout.HEIGHT + 4),
-                    Colour = Color4.White,
-                    Alpha = 0,
-                });
 
                 // marks steps which can't be saved to a .osu file exactly.
                 AddInternal(warning = new Box
@@ -539,9 +589,18 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 });
 
                 cells = new Box[HitsoundLayout.MAX_ROWS];
+                outlines = new Box[HitsoundLayout.MAX_ROWS];
 
                 for (int i = 0; i < cells.Length; i++)
                 {
+                    AddInternal(outlines[i] = new Box
+                    {
+                        X = -2,
+                        Size = new Vector2(CELL_WIDTH + 4, HitsoundLayout.ROW_HEIGHT),
+                        Colour = Color4.White,
+                        Alpha = 0,
+                    });
+
                     AddInternal(cells[i] = new Box
                     {
                         RelativeSizeAxes = Axes.X,
@@ -551,8 +610,6 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
                 Refresh();
             }
-
-            public void SetSelected(bool selected) => outline.Alpha = selected ? 0.9f : 0;
 
             public void UpdateMoment(HitMoment moment)
             {
@@ -575,10 +632,15 @@ namespace osu.Game.Screens.Edit.Hitsounds
                     if (i >= rows.Count)
                     {
                         cells[i].Alpha = 0;
+                        outlines[i].Alpha = 0;
                         continue;
                     }
 
-                    bool on = HitsoundEditing.Has(Moment, rows[i].Lane);
+                    var sample = Moment.Samples.FirstOrDefault(rows[i].Lane.Matches);
+                    bool on = sample != null;
+
+                    outlines[i].Y = rows[i].Y - 1;
+                    outlines[i].Alpha = on && isSelected(sample!) ? 0.9f : 0;
 
                     cells[i].Y = rows[i].Y + 1;
                     cells[i].Colour = on ? HitsoundLayout.ColourOf(rows[i].Lane) : off_colour;

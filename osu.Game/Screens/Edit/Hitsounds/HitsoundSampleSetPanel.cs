@@ -260,7 +260,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                             Padding = new MarginPadding { Left = 10 },
                             Children = new Drawable[]
                             {
-                                name = new OsuSpriteText { Width = 300, Truncate = true, Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
+                                name = new TruncatingSpriteText { Width = 300, Anchor = Anchor.CentreLeft, Origin = Anchor.CentreLeft },
                                 new RoundedButton { Width = 80, Height = 28, Text = "play", Action = play },
                                 new RoundedButton { Width = 120, Height = 28, Text = "use this file", Action = () => target.Value = pending },
                             },
