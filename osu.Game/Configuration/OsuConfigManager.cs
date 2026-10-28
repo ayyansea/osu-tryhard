@@ -210,6 +210,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.EditorTimelineShowRhythmStrip, true);
             SetDefault(OsuSetting.HitsoundSamplesDirectory, string.Empty);
             SetDefault(OsuSetting.LazerExecutable, string.Empty);
+            SetDefault(OsuSetting.MapsetVerifierPath, string.Empty);
             SetDefault(OsuSetting.EditorShowSpeedChanges, false);
             SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.GridCentre);
             SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.GridCentre);
@@ -509,5 +510,10 @@ namespace osu.Game.Configuration
         /// The osu!lazer executable (or AppImage) which the beatmap is sent to for testing. Empty to look in the usual places.
         /// </summary>
         LazerExecutable,
+
+        /// <summary>
+        /// Mapset Verifier, which the Verify screen runs its checks with: its backend executable, or the packaged app (AppImage). Empty to look in the usual places.
+        /// </summary>
+        MapsetVerifierPath,
     }
 }

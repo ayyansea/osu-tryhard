@@ -224,7 +224,7 @@ namespace osu.Game.Screens.Edit.Verify
                 issueTypeText.Colour = Current.Value.Template.Colour;
                 issueTimestampText.Text = Current.Value.GetEditorTimestamp();
                 issueDetailText.Text = Current.Value.ToString();
-                issueCategoryText.Text = Current.Value.Check.Metadata.Category.ToString();
+                issueCategoryText.Text = Current.Value.Check is MapsetVerifierCheck ? Current.Value.Check.Metadata.Description : Current.Value.Check.Metadata.Category.ToString();
 
                 bool isSelected = selectedIssue.Value == current.Value;
 

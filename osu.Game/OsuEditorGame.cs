@@ -27,6 +27,7 @@ using osu.Game.Online.API;
 using osu.Game.Overlays;
 using osu.Game.Overlays.Volume;
 using osu.Game.Screens;
+using osu.Game.Screens.Edit.Verify;
 using osu.Game.Screens.EditorSelect;
 using osu.Game.Screens.Menu;
 
@@ -323,6 +324,8 @@ namespace osu.Game
         protected override void Dispose(bool isDisposing)
         {
             base.Dispose(isDisposing);
+
+            MapsetVerifierServer.Stop();
 
             if (Host?.Window != null)
                 Host.Window.DragDrop -= onWindowDragDrop;

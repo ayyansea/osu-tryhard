@@ -45,7 +45,7 @@ Upstream's analyzers are errors in the build. Ones met so far:
 | `osu.Game/Input/Bindings/GlobalActionContainer.cs` | Key bindings and the `GlobalAction` enum. |
 | `osu.Game/Configuration/OsuConfigManager.cs` | `OsuSetting` enum and defaults (`game.ini`). |
 | `osu.Game/Tests/Visual/` | Test base classes living in the main assembly (`EditorTestScene`, `EditorSavingTestScene`). |
-| `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`. |
+| `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `TestSceneVerifyScreen.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`. |
 | `osu.Game.Rulesets.Osu(.Tests)/` | osu!standard. Fork additions: slider section angles (`Edit/Blueprints/Sliders/Components/SliderSectionAngleOverlay.cs`), `HitsoundEditingTest`, `HitsoundSampleProcessorTest`, `LazerTestLauncherTest`. |
 
 Outside the repo, handy for reading (not editable from inside this repo's tooling; use plain file reads):
@@ -125,9 +125,9 @@ Persistence and undo:
 - `Apply to this difficulty`: matches steps to hit objects / slider nodes by rounded ms (+-1) and copies samples; steps without an object are dropped, objects without a step are untouched. `Apply to all difficulties` additionally loads each other difficulty via `BeatmapManager.GetWorkingBeatmap`, applies and `BeatmapManager.Save`s it. Applying to the open difficulty goes through its `EditorBeatmap` (its own undo history, only reachable from the compose screen).
 
 Sample files (the sample set panel):
+- Sample sets are managed **only here**: the Setup screen's Resources section no longer has a sample set chooser/file list (it duplicated this panel). Upstream's `FormSampleSet` control is now unused apart from `TestSceneFormSampleSet`. General rule for the fork: when a feature lives in a new screen (rhythm, hitsounds), don't keep a second copy in the upstream screens.
 - Files are added to the beatmap *set* with `BeatmapManager.AddFile` under the legacy names `<bank>-hit<name><suffix>.wav` (e.g. `soft-hitwhistle2.wav`), so they apply to every difficulty. Removal uses `DeleteFile`.
 - Adding runs `HitsoundSampleProcessor`: decode with BASS (any format), trim leading silence (threshold 0.001, same as `CheckDelayedHitsounds`), normalise the peak to -0.1 dB, pad to 25 ms (ranking criteria), warn if the peak is later than 5 ms, write 16-bit PCM WAV (MP3 isn't allowed for hitsounds). A notification reports what was done; undecodable files are added unchanged. Same-named files with other extensions are deleted first (no unused files).
-- Sample sets are managed **only here**: the Setup screen's Resources section no longer has a sample set chooser/file list (it duplicated this panel). Upstream's `FormSampleSet` control is now unused apart from `TestSceneFormSampleSet`. General rule for the fork: when a feature lives in a new screen (rhythm, hitsounds), don't keep a second copy in the upstream screens.
 - The file chooser is `PreviewFileChooserPopover : FormFileSelector.FileChooserPopover`: picking a file previews it (BASS sample store from a `StorageBackedResourceStore`) and a "use this file" button confirms.
 - Setting `OsuSetting.HitsoundSamplesDirectory` (`game.ini`): the folder the chooser starts in, chosen with the "sound folder" button (a directory popover).
 - After a file operation the skin updates through `RealmBackedResourceStore` realm notifications -> `EditorBeatmapSkin.BeatmapSkinChanged` -> `HitsoundSampleSetPanel.refresh`. This is asynchronous.
@@ -154,7 +154,7 @@ Executable lookup: `OsuSetting.LazerExecutable` (`game.ini`, empty by default), 
 - Data dir (Linux): `~/.local/share/osu-tryhard` (`osu-tryhard-development` in debug builds). Contains `client.realm`, `files/`, `framework.ini`, `game.ini`, `input.json`, `hitsounds/`, `rhythm/`, `exports/`, `logs/`.
 - Runtime logs: `logs/*.runtime.log` (exceptions show up as `[error]` lines with stack traces). A screen that loads blank almost always means an exception in a `[BackgroundDependencyLoader]`; check the log.
 - Moving the whole data dir: `storage.ini` in the default dir with `FullPath = /path` (`OsuStorage`). There is no "songs folder": maps are imported (copied) into the realm/file store; see README for drag & drop.
-- Fork settings in `OsuSetting`: `HitsoundSamplesDirectory`, `LazerExecutable`, `EditorTimelineShowRhythmStrip`, `EditorShowSliderSectionAngles`.
+- Fork settings in `OsuSetting`: `HitsoundSamplesDirectory`, `LazerExecutable`, `MapsetVerifierPath`, `EditorTimelineShowRhythmStrip`, `EditorShowSliderSectionAngles`.
 - The editor persists realm-stored key bindings by int `GlobalAction`; never reorder or insert in the middle of that enum.
 
 ### 5.5 Slider section angles (`Osu/Edit/Blueprints/Sliders/Components/SliderSectionAngleOverlay.cs`)
@@ -170,6 +170,16 @@ Shows the angle of each slider section while editing. Angles are folded into [0,
 ### 5.7 Beatmap select (`Screens/EditorSelect/EditorBeatmapSelect.cs`)
 
 Reads sets from realm (`allSets`), `SelectedSet` bindable. **`BeatmapSetInfo` equality is by ID**, so assigning a fresh model to `SelectedSet` is a no-op; `updateDifficulties` re-resolves the set by ID from `allSets` (this was the "stale difficulty name after editing" bug). Background: loads the first difficulty's texture off-thread, request counter guards against stale results, dimmed with `Background6`.
+
+### 5.8 Ranking criteria checks with Mapset Verifier (`Screens/Edit/Verify/`)
+
+The Verify screen (upstream's, `IssueList`/`IssueTable`) runs [Mapset Verifier](https://github.com/Naxesss/MapsetVerifier) (MV, v2+, by Naxess) when it's installed, and the built-in checks (`Rulesets/Edit/Checks/`) otherwise or when MV fails. The status text bottom left (`IssueList.Source`) says which one produced the list.
+
+- **MV is GPL-3.0, this repo is MIT: never reference its projects, copy its checks or commit its binaries.** It is used out of process, over HTTP, like MV's own Electron UI does (`MapsetVerifierServer`).
+- Backend = the ASP.NET `MapsetVerifier` executable (self-contained). `MapsetVerifierPath` (`game.ini`) is that executable, or the packaged app (an AppImage: the backend is extracted once with `--appimage-extract resources/bin/*` into `<data dir>/mapset-verifier/<size>-<mtime>/`). Empty = `/usr/bin/mapset-verifier` (the AUR/Linux package; ponytail: no other auto-detection). It's started on first use on port **51005** (MV's UI uses 5005) with `--urls=`, an already running one on that port is reused (`/health`), and `MapsetVerifierServer.Stop()` kills it in `OsuEditorGame.Dispose`. A backend orphaned by a crash/`kill -9` of this client lives on; a wedged one needs `kill -9`.
+- Flow (`IssueList.runMapsetVerifier`): MV reads a **folder**, so the set's files are written to `%TMP%/osu-tryhard-verify/<setId>/` (emptied first, otherwise old files show up as unused) with the open difficulty encoded from memory (`LegacyBeatmapEncoder` on `PlayableBeatmap`, so unsaved edits are checked, the other difficulties are the saved ones), then `POST /beatmap/runChecks {folder, createSnapshot:false}`. Use absolute paths: a relative one is resolved against the backend's cwd. One check that throws makes the whole run a 500 (the message is shown, built-in checks take over).
+- `MapsetVerifierIssues.Parse` turns the JSON into the upstream `Issue` type, so the table, filters and click-to-seek work unchanged: `general` -> `CheckScope.BeatmapSet`, the difficulty whose `category` equals `DifficultyName` -> `CheckScope.Difficulty`; levels Problem/Warning/Error map 1:1, Minor/Info/Check -> `Negligible` (hidden by default; Minor is the bulk of MV's output); a leading `mm:ss:fff (objects) - ` of the message becomes `Issue.Time` (and the objects at that time are attached, so a click selects them). `MapsetVerifierCheck` is the adapter `ICheck`; the table's category column shows its description (MV doesn't give categories). The interpreted-difficulty setting only affects the built-in checks.
+- Tests: `MapsetVerifierTest` (Osu.Tests: parsing, folder writer, and a run against the real backend that is ignored when MV isn't installed) and `TestSceneVerifyScreen`. The real-backend tests start MV on this machine; they stop it afterwards.
 
 ## 6. Gotchas learned the hard way
 
