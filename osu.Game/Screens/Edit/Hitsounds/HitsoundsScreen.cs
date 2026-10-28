@@ -12,6 +12,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
+using osu.Game.Audio;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterfaceV2;
@@ -41,6 +42,11 @@ namespace osu.Game.Screens.Edit.Hitsounds
         private readonly Bindable<EditorBeatmapSkin.SampleSet?> currentSampleSet = new Bindable<EditorBeatmapSkin.SampleSet?>();
 
         private readonly EditorHitsounds hitsounds;
+
+        private readonly BindableInt selectionVolume = createVolume();
+        private readonly BindableInt allVolume = createVolume();
+        private HitsoundPatternEditor patternEditor = null!;
+        private bool refreshingVolumes;
 
         [Resolved]
         private EditorClock clock { get; set; } = null!;
@@ -149,6 +155,19 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                                     new RoundedButton { Width = 180, Height = 28, Text = "import from this difficulty", Action = hitsounds.ImportFromHitObjects },
                                                 },
                                             },
+                                            new FillFlowContainer
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                AutoSizeAxes = Axes.Y,
+                                                Direction = FillDirection.Full,
+                                                Spacing = new Vector2(8),
+                                                Children = new Drawable[]
+                                                {
+                                                    createVolumeSlider("paint volume", "The volume of the sounds you paint.", hitsounds.PaintVolume),
+                                                    createVolumeSlider("selected volume", "Sets the volume of every selected sound. Shows the average when they differ.", selectionVolume),
+                                                    createVolumeSlider("all volume", "Sets the volume of every sound of the track. Shows the average when they differ.", allVolume),
+                                                },
+                                            },
                                             status = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12)) { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y },
                                             legend = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12))
                                             {
@@ -187,7 +206,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                     new Container
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        Child = new TimelineArea(new HitsoundPatternEditor(hitsounds, layout, selectMode) { RelativeSizeAxes = Axes.Both }, HitsoundLayout.HEIGHT, false)
+                                        Child = new TimelineArea(patternEditor = new HitsoundPatternEditor(hitsounds, layout, selectMode) { RelativeSizeAxes = Axes.Both }, HitsoundLayout.HEIGHT, false)
                                         {
                                             Anchor = Anchor.Centre,
                                             Origin = Anchor.Centre,
@@ -209,6 +228,34 @@ namespace osu.Game.Screens.Edit.Hitsounds
             hitsounds.SelectionChanged += updateClipboardActionAvailability;
             updateClipboardActionAvailability();
 
+            // the sliders only transfer their value when committed, which is when the volume is actually edited.
+            hitsounds.PaintVolume.BindValueChanged(v => patternEditor.Preview(new HitsoundLane(HitSampleInfo.BANK_NORMAL, 1, HitSampleInfo.HIT_NORMAL).Create(v.NewValue)));
+
+            selectionVolume.BindValueChanged(v =>
+            {
+                if (refreshingVolumes)
+                    return;
+
+                hitsounds.SetSelectedVolume(v.NewValue);
+
+                var sample = hitsounds.Selected.FirstOrDefault();
+
+                if (sample != null)
+                    patternEditor.Preview(sample);
+            });
+
+            allVolume.BindValueChanged(v =>
+            {
+                if (!refreshingVolumes)
+                    hitsounds.SetAllVolume(v.NewValue);
+            });
+
+            hitsounds.SelectionChanged += scheduleVolumeRefresh;
+            hitsounds.StepAdded += onStepChanged;
+            hitsounds.StepRemoved += onStepChanged;
+            hitsounds.StepUpdated += onStepChanged;
+            refreshVolumes();
+
             hitsounds.SampleSetsChanged += updateLayoutSampleSets;
             updateLayoutSampleSets();
 
@@ -227,6 +274,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             legend.AddText("paint tool (2): click or drag in a lane (snaps to the beat divisor) to place or erase that sound, right click deletes a step.\n" +
                            "select tool (1): click a sound, ctrl / shift click to add, drag to box select the sounds of the lanes the box covers, double click a lane name to select its whole lane, drag a selected sound to move the selection, delete to delete, ctrl+a / x / c / v.\n" +
                            "scroll over the lane names (or use lanes up / down) to see other banks and sample sets, click a lane name to hear it. play the track to audition.\n" +
+                           "volume: the height of a sound shows its volume. \"paint volume\" is the volume of the sounds you paint, \"selected volume\" sets the volume of the selection (double click a lane name to select a whole lane) and \"all volume\" the volume of everything. a step holds one volume in a .osu file, so sounds with different volumes in one step get a red mark.\n" +
                            "the hitsounds belong to the whole set and are independent of hit objects. \"apply\" assigns them to the objects at the same time (steps with no object are dropped), to this difficulty or to every difficulty of the set (which saves them); \"import\" replaces the hitsounds with this difficulty's current samples.");
         }
 
@@ -247,7 +295,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         private static string describeUnrepresentable(int unrepresentable) => unrepresentable == 0
             ? string.Empty
-            : $" {unrepresentable} hit object(s) / slider node(s) got a mix of banks or sample sets (red mark above the step) which a .osu file can't store exactly, only one normal bank, one addition bank and one sample set per object survive saving.";
+            : $" {unrepresentable} hit object(s) / slider node(s) got a mix of banks, sample sets or volumes (red mark above the step) which a .osu file can't store exactly, only one normal bank, one addition bank, one sample set and one volume per object survive saving.";
 
         private void apply()
         {
@@ -270,6 +318,52 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
             hitsounds.RegisterSampleSets(sets.Concat(created));
         }
+
+        #region Volume
+
+        private static BindableInt createVolume() => new BindableInt(HitsoundEditing.MAX_VOLUME)
+        {
+            MinValue = HitsoundEditing.MIN_VOLUME,
+            MaxValue = HitsoundEditing.MAX_VOLUME,
+        };
+
+        private static FormSliderBar<int> createVolumeSlider(string caption, string hint, BindableInt volume) => new FormSliderBar<int>
+        {
+            RelativeSizeAxes = Axes.None,
+            Width = 200,
+            Caption = caption,
+            HintText = hint,
+            KeyboardStep = 5,
+            TransferValueOnCommit = true,
+            Current = { BindTarget = volume },
+        };
+
+        private void onStepChanged(HitsoundStep _) => scheduleVolumeRefresh();
+
+        private void scheduleVolumeRefresh() => Scheduler.AddOnce(refreshVolumes);
+
+        /// <summary>
+        /// Shows the volume of the selection and of the whole track (their average if they differ), after the sounds changed.
+        /// </summary>
+        private void refreshVolumes()
+        {
+            refreshingVolumes = true;
+
+            setDisplayedVolume(selectionVolume, hitsounds.SelectedVolume);
+            setDisplayedVolume(allVolume, hitsounds.OverallVolume);
+
+            refreshingVolumes = false;
+        }
+
+        // nothing to set the volume of -> disabled.
+        private static void setDisplayedVolume(BindableInt bindable, int? volume)
+        {
+            bindable.Disabled = false;
+            bindable.Value = volume ?? HitsoundEditing.MAX_VOLUME;
+            bindable.Disabled = volume == null;
+        }
+
+        #endregion
 
         #region Input
 
@@ -357,6 +451,10 @@ namespace osu.Game.Screens.Edit.Hitsounds
         {
             hitsounds.SampleSetsChanged -= updateLayoutSampleSets;
             hitsounds.SelectionChanged -= updateClipboardActionAvailability;
+            hitsounds.SelectionChanged -= scheduleVolumeRefresh;
+            hitsounds.StepAdded -= onStepChanged;
+            hitsounds.StepRemoved -= onStepChanged;
+            hitsounds.StepUpdated -= onStepChanged;
 
             if (EditorBeatmap.IsNotNull() && EditorBeatmap.BeatmapSkin != null)
                 EditorBeatmap.BeatmapSkin.BeatmapSkinChanged -= scheduleRegisterSampleSets;

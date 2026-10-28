@@ -247,14 +247,19 @@ namespace osu.Game.Screens.Edit.Hitsounds
         /// Plays the sample of a lane as an edit preview.
         /// This uses a single sound which is throttled, so that painting a long run doesn't stack up into something very loud.
         /// </summary>
-        public void Preview(HitsoundLane lane)
+        public void Preview(HitsoundLane lane) => Preview(lane.Create(hitsounds.PaintVolume.Value));
+
+        /// <summary>
+        /// Plays a sound as an edit preview, at its own volume.
+        /// </summary>
+        public void Preview(HitSampleInfo sample)
         {
             if (Time.Current - lastPreviewTime < preview_interval)
                 return;
 
             lastPreviewTime = Time.Current;
 
-            previewSound.Samples = new ISampleInfo[] { lane.Create() };
+            previewSound.Samples = new ISampleInfo[] { sample };
             previewSound.Play();
         }
 
@@ -382,7 +387,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                     else
                         hitsounds.SetSelection(additive ? hitsounds.Selected.Append(sample) : new[] { sample });
 
-                    Preview(lane);
+                    Preview(sample);
 
                     hitsounds.BeginChange();
                     moving = true;
@@ -526,7 +531,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 hitsounds.Add(step);
             }
 
-            if (!HitsoundEditing.SetLane(HitsoundEditing.GetMoments(step).Single(), targetLane, targetOn))
+            if (!HitsoundEditing.SetLane(HitsoundEditing.GetMoments(step).Single(), targetLane, targetOn, hitsounds.PaintVolume.Value))
                 return;
 
             // steps without any sample left are not worth keeping.
@@ -642,7 +647,10 @@ namespace osu.Game.Screens.Edit.Hitsounds
                     outlines[i].Y = rows[i].Y - 1;
                     outlines[i].Alpha = on && isSelected(sample!) ? 0.9f : 0;
 
-                    cells[i].Y = rows[i].Y + 1;
+                    // the height of a sound shows its volume.
+                    float height = on ? (HitsoundLayout.ROW_HEIGHT - 2) * (0.3f + 0.7f * sample!.Volume / HitsoundEditing.MAX_VOLUME) : HitsoundLayout.ROW_HEIGHT - 2;
+                    cells[i].Height = height;
+                    cells[i].Y = rows[i].Y + 1 + (HitsoundLayout.ROW_HEIGHT - 2 - height) / 2;
                     cells[i].Colour = on ? HitsoundLayout.ColourOf(rows[i].Lane) : off_colour;
                     cells[i].Alpha = on ? 0.95f : 0.35f;
                 }

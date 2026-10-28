@@ -40,7 +40,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                                               || (Name != HitSampleInfo.HIT_NORMAL && sample.Name != HitSampleInfo.HIT_NORMAL && sample.Bank != Bank));
 
         // sets are looked up in the beatmap's own files first, which is what makes custom sample files play.
-        public HitSampleInfo Create() => new HitSampleInfo(Name, Bank, SuffixOf(SampleSet), editorAutoBank: false, useBeatmapSamples: true);
+        public HitSampleInfo Create(int volume = HitsoundEditing.MAX_VOLUME) => new HitSampleInfo(Name, Bank, SuffixOf(SampleSet), volume, editorAutoBank: false, useBeatmapSamples: true);
 
         public string Label => $"{Bank} {Name.Replace("hit", string.Empty)}{(SampleSet >= 2 ? $" #{SampleSet}" : string.Empty)}";
     }
@@ -51,6 +51,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
     /// </summary>
     public static class HitsoundEditing
     {
+        public const int MIN_VOLUME = 1;
+        public const int MAX_VOLUME = 100;
+
         public static IEnumerable<HitMoment> GetMoments(HitObject hitObject)
         {
             if (hitObject is IHasRepeats repeats)
@@ -67,7 +70,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
         public static bool Has(HitMoment moment, HitsoundLane lane) => moment.Samples.Any(lane.Matches);
 
         /// <summary>
-        /// Whether the samples survive saving as a .osu file, which only has one normal bank, one addition bank and one sample set per hit object (or slider node).
+        /// Whether the samples survive saving as a .osu file, which only has one normal bank, one addition bank, one sample set and one volume per hit object (or slider node).
         /// </summary>
         public static bool IsRepresentable(IEnumerable<HitSampleInfo> samples)
         {
@@ -77,7 +80,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
             return list.Count(s => s.Name == HitSampleInfo.HIT_NORMAL) <= 1
                    && additions.Select(s => s.Name).Distinct().Count() == additions.Count
                    && additions.Select(s => s.Bank).Distinct().Count() <= 1
-                   && list.Select(s => HitsoundLane.SampleSetOf(s.Suffix)).Distinct().Count() <= 1;
+                   && list.Select(s => HitsoundLane.SampleSetOf(s.Suffix)).Distinct().Count() <= 1
+                   && list.Select(s => s.Volume).Distinct().Count() <= 1;
         }
 
         public static void SetSamples(HitMoment moment, IList<HitSampleInfo> samples)
@@ -97,7 +101,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
         /// Adds or removes the sample of a lane. Adding replaces any samples which can't be saved together with it (see <see cref="HitsoundLane.ConflictsWith"/>), so that a step always stays stable compatible.
         /// </summary>
         /// <returns>Whether anything changed.</returns>
-        public static bool SetLane(HitMoment moment, HitsoundLane lane, bool on)
+        public static bool SetLane(HitMoment moment, HitsoundLane lane, bool on, int volume = MAX_VOLUME)
         {
             var samples = moment.Samples.ToList();
 
@@ -107,7 +111,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                     return false;
 
                 samples.RemoveAll(lane.ConflictsWith);
-                samples.Add(lane.Create());
+                samples.Add(lane.Create(volume));
             }
             else if (samples.RemoveAll(lane.Matches) == 0)
                 return false;

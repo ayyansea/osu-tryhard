@@ -114,6 +114,8 @@ Selection: by **sample instance** (`HashSet<HitSampleInfo>(ReferenceEqualityComp
 
 Painting: first cell of a stroke decides add or erase; each time is painted once per stroke (`paintedTimes`); snapped via `IBeatSnapProvider`; a stroke is one undo step (`BeginChange/EndChange`). Edit previews go through one throttled `SkinnableSound` (100 ms) because many overlapping plays were far too loud. Audition during playback uses a pool of 24 `SkinnableSound`s inside an `EditorSkinProvidingContainer`.
 
+Volume: every sound has its own `HitSampleInfo.Volume` (1-100, `HitsoundEditing.MIN/MAX_VOLUME`), shown as the cell height. `HitsoundsScreen` has three `FormSliderBar<int>`s (`TransferValueOnCommit`, so one commit = one undo step): *paint volume* (`EditorHitsounds.PaintVolume`, used for new sounds and edit previews), *selected volume* and *all volume* (`SetSelectedVolume` / `SetAllVolume` -> `SetVolume`; they show the average, selected is disabled without a selection). `HitSampleInfo` is immutable, so `SetVolume` **replaces** the instances and re-maps the by-reference selection. A .osu stores one volume per hit object / slider node (the encoder uses the first/max sample's), so `IsRepresentable` also requires one volume per step; mixed steps get the red mark and are counted in the apply report.
+
 Drags are continued **every frame** in `Update` (`continueDrag`) rather than per mouse event, so the box/move/paint follows the cursor while the timeline auto-scrolls near its edges (same constants as compose's `TimelineBlueprintContainer.handleScrollViaDrag`).
 
 Persistence and undo:

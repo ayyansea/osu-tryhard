@@ -180,6 +180,45 @@ namespace osu.Game.Rulesets.Osu.Tests
             Assert.That(hitsounds.Steps.Single(s => s.StartTime == 300).Samples.Single().Bank, Is.EqualTo(HitSampleInfo.BANK_SOFT));
         }
 
+        [Test]
+        public void TestVolume()
+        {
+            var hitsounds = new EditorHitsounds(null!);
+            var a = new HitsoundStep { StartTime = 100, Samples = { soft_normal.Create(60), drum_clap.Create(40) } };
+            var b = new HitsoundStep { StartTime = 300, Samples = { soft_normal.Create() } };
+            hitsounds.Add(a);
+            hitsounds.Add(b);
+
+            // a .osu file stores one volume per hit object, so a mix can't be saved exactly.
+            Assert.That(HitsoundEditing.IsRepresentable(a.Samples), Is.False);
+            Assert.That(hitsounds.OverallVolume, Is.EqualTo(67));
+
+            hitsounds.SelectLane(soft_normal, false);
+            Assert.That(hitsounds.SelectedVolume, Is.EqualTo(80));
+
+            // the selected sounds are replaced, stay selected, and the others are left alone.
+            hitsounds.SetSelectedVolume(50);
+            Assert.That(hitsounds.Selected, Has.Count.EqualTo(2));
+            Assert.That(hitsounds.Selected.Select(s => s.Volume), Is.EqualTo(new[] { 50, 50 }));
+            Assert.That(hitsounds.Steps.SelectMany(s => s.Samples).Count(hitsounds.IsSelected), Is.EqualTo(2));
+            Assert.That(a.Samples.Single(s => s.Name == HitSampleInfo.HIT_CLAP).Volume, Is.EqualTo(40));
+
+            hitsounds.SetAllVolume(70);
+            Assert.That(hitsounds.Steps.SelectMany(s => s.Samples).Select(s => s.Volume), Is.All.EqualTo(70));
+            Assert.That(HitsoundEditing.IsRepresentable(a.Samples), Is.True);
+
+            // out of range volumes are clamped, and the volume is saved.
+            hitsounds.SetAllVolume(1000);
+            Assert.That(hitsounds.OverallVolume, Is.EqualTo(HitsoundEditing.MAX_VOLUME));
+            hitsounds.SetAllVolume(0);
+            Assert.That(HitsoundSerializer.Read(HitsoundSerializer.Write(hitsounds.Steps)).SelectMany(s => s.Samples).Select(s => s.Volume), Is.All.EqualTo(HitsoundEditing.MIN_VOLUME));
+
+            // painted sounds get the given volume.
+            var circle = new HitCircle { StartTime = 1000 };
+            HitsoundEditing.SetLane(HitsoundEditing.GetMoments(circle).Single(), drum_clap, true, 30);
+            Assert.That(circle.Samples.Single().Volume, Is.EqualTo(30));
+        }
+
         /// <summary>
         /// Steps can hold any mix of lanes, but .osu files only have one normal bank, one addition bank and one sample set per hit object.
         /// This documents what survives saving.

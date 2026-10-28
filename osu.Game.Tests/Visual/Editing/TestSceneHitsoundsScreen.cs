@@ -121,5 +121,39 @@ namespace osu.Game.Tests.Visual.Editing
 
             AddStep("undo", () => InputManager.Keys(PlatformAction.Undo));
         }
+
+        [Test]
+        public void TestVolumeSliders()
+        {
+            AddStep("set the paint volume", () => volumeSlider("paint volume").Current.Value = 50);
+
+            AddStep("paint in the first lane at the centre marker", () =>
+            {
+                float x = Editor.ChildrenOfType<HitsoundsScreen>().Single().ChildrenOfType<Timeline>().Single().ScreenSpaceDrawQuad.Centre.X;
+                float y = pattern.ToScreenSpace(Vector2.Zero).Y + HitsoundLayout.ROW_HEIGHT / 2;
+
+                InputManager.MoveMouseTo(new Vector2(x, y));
+                InputManager.Click(MouseButton.Left);
+            });
+
+            AddAssert("painted with the paint volume", () => hitsounds.Steps.Single().Samples.Single().Volume, () => Is.EqualTo(50));
+            AddAssert("nothing to set the selection to", () => volumeSlider("selected volume").Current.Disabled, () => Is.True);
+
+            AddStep("select everything", () => hitsounds.SelectAll());
+            AddUntilStep("selection slider shows the volume", () => volumeSlider("selected volume").Current.Disabled == false && volumeSlider("selected volume").Current.Value == 50);
+
+            AddStep("set the selected volume", () => volumeSlider("selected volume").Current.Value = 30);
+            AddAssert("sound changed", () => hitsounds.Steps.Single().Samples.Single().Volume, () => Is.EqualTo(30));
+            AddAssert("sound is still selected", () => hitsounds.IsSelected(hitsounds.Steps.Single().Samples.Single()));
+
+            AddStep("set all volume", () => volumeSlider("all volume").Current.Value = 80);
+            AddAssert("sound changed again", () => hitsounds.Steps.Single().Samples.Single().Volume, () => Is.EqualTo(80));
+            AddUntilStep("selection slider follows", () => volumeSlider("selected volume").Current.Value, () => Is.EqualTo(80));
+
+            AddStep("undo", () => InputManager.Keys(PlatformAction.Undo));
+            AddAssert("volume restored", () => hitsounds.Steps.Single().Samples.Single().Volume, () => Is.EqualTo(30));
+        }
+
+        private FormSliderBar<int> volumeSlider(string caption) => Editor.ChildrenOfType<FormSliderBar<int>>().Single(s => s.Caption.ToString() == caption);
     }
 }

@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
@@ -34,6 +35,11 @@ namespace osu.Game.Screens.Edit.Hitsounds
     /// </remarks>
     public partial class EditorHitsounds : CompositeDrawable
     {
+        /// <summary>
+        /// The volume of the sounds which are painted.
+        /// </summary>
+        public readonly BindableInt PaintVolume = new BindableInt(HitsoundEditing.MAX_VOLUME) { MinValue = HitsoundEditing.MIN_VOLUME, MaxValue = HitsoundEditing.MAX_VOLUME };
+
         public IReadOnlyList<HitsoundStep> Steps => steps;
 
         /// <summary>
@@ -373,6 +379,69 @@ namespace osu.Game.Screens.Edit.Hitsounds
             StepUpdated?.Invoke(step);
             ChangeHandler.SaveState();
         }
+
+        #region Volume
+
+        /// <summary>
+        /// The average volume of the selected sounds, if any are selected.
+        /// </summary>
+        public int? SelectedVolume => selected.Count == 0 ? null : (int)Math.Round(selected.Average(s => s.Volume));
+
+        /// <summary>
+        /// The average volume of all sounds, if there are any.
+        /// </summary>
+        public int? OverallVolume => steps.Any(s => s.Samples.Count > 0) ? (int)Math.Round(steps.SelectMany(s => s.Samples).Average(s => s.Volume)) : null;
+
+        public void SetSelectedVolume(int volume) => SetVolume(selected.ToArray(), volume);
+
+        public void SetAllVolume(int volume) => SetVolume(steps.SelectMany(s => s.Samples).ToArray(), volume);
+
+        /// <summary>
+        /// Sets the volume of the given sounds. Samples are immutable, so they are replaced; selected sounds stay selected.
+        /// </summary>
+        public void SetVolume(IEnumerable<HitSampleInfo> sounds, int volume)
+        {
+            volume = Math.Clamp(volume, HitsoundEditing.MIN_VOLUME, HitsoundEditing.MAX_VOLUME);
+
+            var chosen = new HashSet<HitSampleInfo>(sounds.Where(s => s.Volume != volume), ReferenceEqualityComparer.Instance);
+
+            if (chosen.Count == 0)
+                return;
+
+            var replacements = new Dictionary<HitSampleInfo, HitSampleInfo>(ReferenceEqualityComparer.Instance);
+            var touched = new List<HitsoundStep>();
+
+            BeginChange();
+
+            foreach (var step in steps)
+            {
+                bool changed = false;
+
+                for (int i = 0; i < step.Samples.Count; i++)
+                {
+                    if (!chosen.Contains(step.Samples[i]))
+                        continue;
+
+                    var replacement = step.Samples[i].With(newVolume: volume);
+                    replacements[step.Samples[i]] = replacement;
+                    step.Samples[i] = replacement;
+                    changed = true;
+                }
+
+                if (changed)
+                    touched.Add(step);
+            }
+
+            if (selected.Any(replacements.ContainsKey))
+                SetSelection(selected.Select(s => replacements.GetValueOrDefault(s, s)).ToList());
+
+            foreach (var step in touched)
+                Update(step);
+
+            EndChange();
+        }
+
+        #endregion
 
         public void Replace(IEnumerable<HitsoundStep> newSteps)
         {
