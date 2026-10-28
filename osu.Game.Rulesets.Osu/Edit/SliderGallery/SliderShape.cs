@@ -29,6 +29,16 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
         public List<string> Tags { get; set; } = new List<string>();
 
         /// <summary>
+        /// The map the shape was saved from ("Artist - Title (Mapper) [Difficulty]"), editable.
+        /// </summary>
+        public string OriginalMap { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Favourites are listed in their own section at the top of the gallery.
+        /// </summary>
+        public bool Favourite { get; set; }
+
+        /// <summary>
         /// Control points relative to the head (the first one is at the origin).
         /// </summary>
         public List<(Vector2 Position, PathType? Type)> ControlPoints { get; set; } = new List<(Vector2, PathType?)>();
@@ -45,13 +55,14 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
         /// </summary>
         public double Beats { get; set; }
 
-        public static SliderShape FromSlider(Slider slider, ControlPointInfo controlPoints, string name)
+        public static SliderShape FromSlider(Slider slider, ControlPointInfo controlPoints, string name, string originalMap = "")
         {
             var head = slider.Path.ControlPoints[0].Position;
 
             return new SliderShape
             {
                 Name = name,
+                OriginalMap = originalMap,
                 ControlPoints = slider.Path.ControlPoints.Select(p => (p.Position - head, p.Type)).ToList(),
                 Length = slider.Path.Distance,
                 RepeatCount = slider.RepeatCount,
@@ -100,6 +111,8 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
             writer.WriteLine($"id={shape.ID}");
             writer.WriteLine($"name={shape.Name.Replace('\n', ' ')}");
             writer.WriteLine($"tags={string.Join(',', shape.Tags)}");
+            writer.WriteLine($"map={shape.OriginalMap.Replace('\n', ' ')}");
+            writer.WriteLine($"favourite={(shape.Favourite ? "1" : "0")}");
             writer.WriteLine($"repeats={shape.RepeatCount.ToString(CultureInfo.InvariantCulture)}");
             writer.WriteLine($"length={shape.Length.ToString(CultureInfo.InvariantCulture)}");
             writer.WriteLine($"beats={shape.Beats.ToString(CultureInfo.InvariantCulture)}");
@@ -146,6 +159,14 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 
                     case "tags":
                         shape.Tags = value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+                        break;
+
+                    case "map":
+                        shape.OriginalMap = value;
+                        break;
+
+                    case "favourite":
+                        shape.Favourite = value == "1";
                         break;
 
                     case "repeats":

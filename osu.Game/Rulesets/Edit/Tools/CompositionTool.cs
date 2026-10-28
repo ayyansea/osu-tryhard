@@ -22,6 +22,13 @@ namespace osu.Game.Rulesets.Edit.Tools
 
         public virtual Drawable? CreateIcon() => null;
 
+        /// <summary>
+        /// Called when the tool's button is clicked (or its hotkey pressed), also when the tool is already selected.
+        /// </summary>
+        public virtual void OnButtonClicked()
+        {
+        }
+
         public override string ToString() => Name.ToString();
     }
 

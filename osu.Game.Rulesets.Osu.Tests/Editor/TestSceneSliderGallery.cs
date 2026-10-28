@@ -12,6 +12,8 @@ using osu.Framework.Testing;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
 using osu.Game.Graphics.Containers;
+using osu.Game.Graphics.Sprites;
+using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Rulesets.Objects;
@@ -142,6 +144,36 @@ namespace osu.Game.Rulesets.Osu.Tests.Editor
 
             AddAssert("slider is a line now", () => originalSlider.Path.ControlPoints.Last().Position.Y, () => Is.EqualTo(0).Within(0.01));
             AddAssert("duration kept", () => originalSlider.Duration, () => Is.EqualTo(originalDuration).Within(0.5));
+        }
+
+        [Test]
+        public void TestToolButtonOpensGalleryEveryTime()
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                AddStep("click gallery tool", () => composer.ChildrenOfType<HitObjectCompositionToolButton>().Single(b => b.Tool is SliderGalleryCompositionTool).TriggerClick());
+                AddUntilStep("gallery visible", () => gallery.State.Value, () => Is.EqualTo(Visibility.Visible));
+                AddStep("press escape", () => InputManager.Key(Key.Escape));
+                AddUntilStep("gallery hidden", () => gallery.State.Value, () => Is.EqualTo(Visibility.Hidden));
+            }
+        }
+
+        [Test]
+        public void TestFavouriteAndOriginalMap()
+        {
+            SliderGalleryStore store = null!;
+
+            AddStep("select slider", () => EditorBeatmap.SelectedHitObjects.Add(originalSlider));
+            openGallery();
+            clickButton("Save selected slider");
+
+            AddStep("load store", () => store = new SliderGalleryStore(storage));
+            AddAssert("original map recorded", () => store.Shapes.Single().OriginalMap, () => Is.EqualTo(EditorBeatmap.BeatmapInfo.GetDisplayTitle()));
+            AddAssert("no favourites section", () => gallery.ChildrenOfType<OsuSpriteText>().Single(t => t.Text.ToString() == "Favourites").Alpha, () => Is.Zero);
+
+            AddStep("star the shape", () => gallery.ChildrenOfType<IconButton>().Single(b => b.TooltipText.ToString() == "Add to favourites").TriggerClick());
+            AddUntilStep("favourites section shown", () => gallery.ChildrenOfType<OsuSpriteText>().Single(t => t.Text.ToString() == "Favourites").Alpha, () => Is.EqualTo(1));
+            AddAssert("favourite stored", () => new SliderGalleryStore(storage).Shapes.Single().Favourite);
         }
 
         [Test]

@@ -13,7 +13,7 @@ using osuTK;
 namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 {
     /// <summary>
-    /// Draws a shape's path scaled to fit, with a dot on the head.
+    /// Draws a shape's path scaled to fit, with a ring on the head (like a hit circle) to show which end the slider starts from.
     /// </summary>
     public partial class SliderShapeThumbnail : CompositeDrawable
     {
@@ -21,7 +21,7 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
         private readonly float pathRadius;
 
         private SmoothPath path = null!;
-        private Circle head = null!;
+        private CircularContainer head = null!;
 
         private Vector2 lastDrawSize;
 
@@ -41,10 +41,20 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                 {
                     PathRadius = pathRadius,
                 },
-                head = new Circle
+                head = new CircularContainer
                 {
-                    Size = new Vector2(pathRadius * 4),
+                    Size = new Vector2(pathRadius * 5),
                     Origin = Anchor.Centre,
+                    Masking = true,
+                    BorderThickness = pathRadius,
+                    BorderColour = Colour4.White,
+                    // the border only draws with something inside the mask.
+                    Child = new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Alpha = 0,
+                        AlwaysPresent = true,
+                    },
                 },
             };
         }
@@ -53,11 +63,32 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
         {
             base.Update();
 
-            if (path == null || DrawSize == lastDrawSize || DrawWidth <= 0 || DrawHeight <= 0)
+            if (path == null || DrawWidth <= 0 || DrawHeight <= 0)
                 return;
 
-            lastDrawSize = DrawSize;
-            layout();
+            if (DrawSize != lastDrawSize)
+            {
+                lastDrawSize = DrawSize;
+                layout();
+            }
+
+            alignPath();
+        }
+
+        /// <summary>
+        /// Moves the path so its first vertex is drawn where the head is. Measured rather than derived, as the path's
+        /// own vertex-to-local mapping isn't something to second-guess (getting it wrong put the head next to the path).
+        /// </summary>
+        private void alignPath()
+        {
+            if (path.Vertices.Count == 0)
+                return;
+
+            var drawnStart = path.ToSpaceOfOtherDrawable(path.PositionInBoundingBox(path.Vertices[0]), this);
+            var offset = head.Position - drawnStart;
+
+            if (offset.LengthSquared > 0.0001f)
+                path.Position += offset;
         }
 
         private void layout()
@@ -72,14 +103,13 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
             var max = new Vector2(vertices.Max(v => v.X), vertices.Max(v => v.Y));
             var size = Vector2.ComponentMax(max - min, Vector2.One);
 
-            float margin = pathRadius * 2;
+            // room for the head ring on the edges.
+            float margin = pathRadius * 3;
             float scale = Math.Min((DrawWidth - margin * 2) / size.X, (DrawHeight - margin * 2) / size.Y);
             var offset = (DrawSize - size * scale) / 2 - min * scale;
 
-            // the path drawable positions itself at the top left of its vertices (minus its radius), so position it there to keep the vertices where computed.
             var scaled = vertices.Select(v => v * scale + offset).ToList();
             path.Vertices = scaled;
-            path.Position = new Vector2(scaled.Min(v => v.X), scaled.Min(v => v.Y)) - new Vector2(pathRadius);
             head.Position = scaled[0];
         }
     }

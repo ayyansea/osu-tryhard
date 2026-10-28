@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using osu.Framework.Allocation;
@@ -11,6 +12,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Game.Beatmaps;
 using osu.Game.Extensions;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
@@ -51,7 +53,12 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
         private OsuColour colours { get; set; } = null!;
 
         private SearchTextBox search = null!;
-        private FillFlowContainer<ShapeCard> cards = null!;
+        private OsuSpriteText favouritesHeader = null!;
+        private FillFlowContainer<ShapeCard> favouriteCards = null!;
+        private OsuSpriteText othersHeader = null!;
+        private FillFlowContainer<ShapeCard> otherCards = null!;
+
+        private IEnumerable<ShapeCard> allCards => favouriteCards.Concat(otherCards);
         private OsuSpriteText emptyText = null!;
         private Container detail = null!;
         private RoundedButton saveButton = null!;
@@ -147,12 +154,20 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                                 new OsuScrollContainer
                                 {
                                     RelativeSizeAxes = Axes.Both,
-                                    Child = cards = new FillFlowContainer<ShapeCard>
+                                    Child = new FillFlowContainer
                                     {
                                         RelativeSizeAxes = Axes.X,
                                         AutoSizeAxes = Axes.Y,
                                         Padding = new MarginPadding(10),
                                         Spacing = new Vector2(10),
+                                        Direction = FillDirection.Vertical,
+                                        Children = new Drawable[]
+                                        {
+                                            favouritesHeader = createSectionHeader("Favourites"),
+                                            favouriteCards = createCardFlow(),
+                                            othersHeader = createSectionHeader("Other shapes"),
+                                            otherCards = createCardFlow(),
+                                        }
                                     }
                                 },
                                 emptyText = new OsuSpriteText
@@ -179,6 +194,19 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
             };
         }
 
+        private static OsuSpriteText createSectionHeader(string text) => new OsuSpriteText
+        {
+            Text = text,
+            Font = OsuFont.Default.With(size: 16, weight: FontWeight.SemiBold),
+        };
+
+        private static FillFlowContainer<ShapeCard> createCardFlow() => new FillFlowContainer<ShapeCard>
+        {
+            RelativeSizeAxes = Axes.X,
+            AutoSizeAxes = Axes.Y,
+            Spacing = new Vector2(10),
+        };
+
         protected override void LoadComplete()
         {
             base.LoadComplete();
@@ -204,14 +232,16 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 
         private void onShapesChanged(object? sender, NotifyCollectionChangedEventArgs e)
         {
-            cards.Clear();
+            favouriteCards.Clear();
+            otherCards.Clear();
 
             foreach (var shape in shapes.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase))
             {
-                cards.Add(new ShapeCard(shape)
+                (shape.Favourite ? favouriteCards : otherCards).Add(new ShapeCard(shape)
                 {
                     Selected = () => selected.Value = shape,
                     Activated = () => place(shape),
+                    FavouriteToggled = () => setFavourite(shape, !shape.Favourite),
                 });
             }
 
@@ -226,18 +256,25 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
         {
             string[] terms = search.Current.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries);
 
-            foreach (var card in cards)
+            foreach (var card in allCards)
             {
-                string haystack = $"{card.Shape.Name} {string.Join(' ', card.Shape.Tags)}";
+                string haystack = $"{card.Shape.Name} {string.Join(' ', card.Shape.Tags)} {card.Shape.OriginalMap}";
                 card.Alpha = terms.All(t => haystack.Contains(t, StringComparison.OrdinalIgnoreCase)) ? 1 : 0;
             }
+
+            bool anyFavourite = favouriteCards.Any(c => c.Alpha > 0);
+            bool anyOther = otherCards.Any(c => c.Alpha > 0);
+
+            // the section headers only make sense with favourites to set apart.
+            favouritesHeader.Alpha = anyFavourite ? 1 : 0;
+            othersHeader.Alpha = anyFavourite && anyOther ? 1 : 0;
 
             emptyText.Alpha = shapes.Count == 0 ? 1 : 0;
         }
 
         private void updateCardSelection()
         {
-            foreach (var card in cards)
+            foreach (var card in allCards)
                 card.IsSelected = card.Shape == selected.Value;
         }
 
@@ -264,7 +301,8 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
             foreach (var slider in sliders)
             {
                 string title = editorBeatmap.BeatmapInfo.Metadata.Title;
-                last = SliderShape.FromSlider(slider, editorBeatmap.ControlPointInfo, $"{title} {slider.StartTime.ToEditorFormattedString()}".Trim());
+                last = SliderShape.FromSlider(slider, editorBeatmap.ControlPointInfo, $"{title} {slider.StartTime.ToEditorFormattedString()}".Trim(),
+                    editorBeatmap.BeatmapInfo.GetDisplayTitle());
                 session.Store.Save(last);
             }
 
@@ -272,6 +310,22 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                 selected.Value = last;
 
             status.Text = $"Saved {sliders.Length} shape{(sliders.Length == 1 ? "" : "s")}";
+        }
+
+        private void setFavourite(SliderShape shape, bool favourite)
+        {
+            if (shape.Favourite == favourite)
+                return;
+
+            shape.Favourite = favourite;
+            session.Store.Save(shape);
+
+            // the change can come from a control that the refresh replaces, so it can't run inside that control's callback.
+            Scheduler.AddOnce(() =>
+            {
+                onShapesChanged(null, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+                updateDetail();
+            });
         }
 
         private void place(SliderShape shape)
@@ -344,6 +398,7 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 
             FormTextBox name;
             FormTextBox tags;
+            FormTextBox originalMap;
 
             int sliderCount = selectedSliders.Length;
 
@@ -393,6 +448,17 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                         HintText = "Separated by commas.",
                         Current = { Value = string.Join(", ", shape.Tags) },
                     },
+                    originalMap = new FormTextBox
+                    {
+                        Caption = "Original map",
+                        HintText = "The map the shape was saved from.",
+                        Current = { Value = shape.OriginalMap },
+                    },
+                    new FormCheckBox
+                    {
+                        Caption = "Favourite",
+                        Current = { Value = shape.Favourite },
+                    }.With(c => c.Current.BindValueChanged(v => setFavourite(shape, v.NewValue))),
                     new RoundedButton
                     {
                         RelativeSizeAxes = Axes.X,
@@ -426,6 +492,13 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                 shape.Name = name.Current.Value.Trim();
                 session.Store.Save(shape);
                 onShapesChanged(null, new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            };
+
+            originalMap.OnCommit += (_, _) =>
+            {
+                shape.OriginalMap = originalMap.Current.Value.Trim();
+                session.Store.Save(shape);
+                updateFilter();
             };
 
             tags.OnCommit += (_, _) =>
@@ -490,11 +563,15 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 
             public Action? Selected { get; init; }
             public Action? Activated { get; init; }
+            public Action? FavouriteToggled { get; init; }
 
             private Box background = null!;
 
             [Resolved]
             private OverlayColourProvider colourProvider { get; set; } = null!;
+
+            [Resolved]
+            private OsuColour colours { get; set; } = null!;
 
             private bool isSelected;
 
@@ -519,6 +596,7 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                 Masking = true;
                 CornerRadius = 5;
                 Action = () => Selected?.Invoke();
+                TooltipText = Shape.OriginalMap;
 
                 Children = new Drawable[]
                 {
@@ -528,6 +606,15 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
                         RelativeSizeAxes = Axes.X,
                         Height = 110,
                         Colour = colourProvider.Highlight1,
+                    },
+                    new IconButton
+                    {
+                        Anchor = Anchor.TopRight,
+                        Origin = Anchor.TopRight,
+                        Icon = Shape.Favourite ? FontAwesome.Solid.Star : FontAwesome.Regular.Star,
+                        IconColour = Shape.Favourite ? colours.Yellow : colourProvider.Content2,
+                        TooltipText = Shape.Favourite ? "Remove from favourites" : "Add to favourites",
+                        Action = () => FavouriteToggled?.Invoke(),
                     },
                     new FillFlowContainer
                     {

@@ -34,6 +34,8 @@ namespace osu.Game.Rulesets.Osu.Tests
         {
             Name = "wave",
             Tags = { "curvy", "long" },
+            OriginalMap = "Artist - Title (Mapper) [Insane]",
+            Favourite = true,
             ControlPoints =
             {
                 (Vector2.Zero, PathType.BEZIER),
@@ -68,6 +70,8 @@ namespace osu.Game.Rulesets.Osu.Tests
             Assert.That(result!.ID, Is.EqualTo(shape.ID));
             Assert.That(result.Name, Is.EqualTo("wave"));
             Assert.That(result.Tags, Is.EqualTo(new[] { "curvy", "long" }));
+            Assert.That(result.OriginalMap, Is.EqualTo("Artist - Title (Mapper) [Insane]"));
+            Assert.That(result.Favourite, Is.True);
             Assert.That(result.RepeatCount, Is.EqualTo(2));
             Assert.That(result.Length, Is.EqualTo(250));
             Assert.That(result.Beats, Is.EqualTo(2));

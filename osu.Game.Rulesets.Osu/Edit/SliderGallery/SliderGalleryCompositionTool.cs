@@ -9,7 +9,7 @@ using osu.Game.Rulesets.Edit.Tools;
 namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 {
     /// <summary>
-    /// Places shapes from the slider gallery. Selecting it without a shape chosen opens the gallery.
+    /// Places shapes from the slider gallery. Clicking its button opens the gallery to pick a shape.
     /// </summary>
     public class SliderGalleryCompositionTool : CompositionTool<OsuAction>
     {
@@ -33,16 +33,13 @@ namespace osu.Game.Rulesets.Osu.Edit.SliderGallery
 
         public override HitObjectPlacementBlueprint? CreatePlacementBlueprint()
         {
-            if (Session == null)
+            if (Session?.ActiveShape.Value == null)
                 return null;
-
-            if (Session.ActiveShape.Value == null)
-            {
-                Session.OpenRequested?.Invoke();
-                return null;
-            }
 
             return new SliderGalleryPlacementBlueprint(Session);
         }
+
+        // opening on click rather than on selection, so clicking the button again (tool already selected) opens the gallery again.
+        public override void OnButtonClicked() => Session?.OpenRequested?.Invoke();
     }
 }

@@ -18,6 +18,13 @@ namespace osu.Game.Rulesets.Edit
         {
             Tool = tool;
 
+            // selecting an already selected tool changes nothing, so the tool gets told about the click separately.
+            Action = () =>
+            {
+                Select();
+                Tool.OnButtonClicked();
+            };
+
             Selected.BindDisabledChanged(isDisabled =>
             {
                 TooltipText = isDisabled ? "Add at least one timing point first!" : Tool.TooltipText;
