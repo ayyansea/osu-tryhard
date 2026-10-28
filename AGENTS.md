@@ -21,6 +21,7 @@ User-facing summary of the fork is in `README.md`; the upstream readme follows i
 - Build only the game library (fast check, ~1 min): `dotnet build osu.Game/osu.Game.csproj --no-restore -v q 2>&1 | grep -E " error |rror\(s\)"`.
 - Unit tests for osu!standard + hitsound logic: `dotnet test osu.Game.Rulesets.Osu.Tests/osu.Game.Rulesets.Osu.Tests.csproj --filter <name>`.
 - Game/visual tests (headless, real `Game`/editor): `dotnet test osu.Game.Tests/osu.Game.Tests.csproj --filter "FullyQualifiedName~<name>"`.
+- If `dotnet` isn't on PATH, the SDK isn't installed (Arch: `sudo pacman -S dotnet-sdk`). In Claude Code's sandbox, `dotnet build/test` needs the sandbox disabled (it writes to `~/.nuget`, `~/.dotnet`).
 - Test builds take minutes. Run them in the background and read the output afterwards instead of blocking a shell on them.
 - BASS (audio decoding) exists in visual tests (they run a real host) but **not** in plain NUnit unit tests: a test that decodes audio must be a visual test, or be allowed to be inconclusive.
 - The ruleset test projects other than Osu are untouched upstream code. Taiko / catch / mania projects still exist in the repo (the Game tests reference catch and mania) but `osu.Desktop` only references `osu.Game.Rulesets.Osu`.
@@ -40,15 +41,15 @@ Upstream's analyzers are errors in the build. Ones met so far:
 | `osu.Desktop/` | Desktop entry (`Program.cs`, `OsuGameDesktop.cs`). Game name `osu-tryhard` (`-development` in debug), friendly name `osu!tryhard editor`. |
 | `osu.Game/OsuEditorGame.cs` | The stripped game host. Start here. |
 | `osu.Game/Screens/EditorSelect/` | The beatmap/difficulty list screen shown on launch. |
-| `osu.Game/Screens/Edit/` | The editor (upstream) plus fork features: `Rhythm/`, `Hitsounds/`, `LazerTestLauncher.cs`. |
+| `osu.Game/Screens/Edit/` | The editor (upstream) plus fork features: `Rhythm/`, `Hitsounds/`, `ComboColours/`, `LazerTestLauncher.cs`. |
 | `osu.Game/Overlays/Volume/GlobalVolumeControl.cs` | Always visible volume sliders. |
 | `osu.Game/Input/Bindings/GlobalActionContainer.cs` | Key bindings and the `GlobalAction` enum. |
 | `osu.Game/Configuration/OsuConfigManager.cs` | `OsuSetting` enum and defaults (`game.ini`). |
 | `osu.Game/Tests/Visual/` | Test base classes living in the main assembly (`EditorTestScene`, `EditorSavingTestScene`). |
-| `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `TestSceneVerifyScreen.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`. |
+| `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `TestSceneVerifyScreen.cs`, `TestSceneComboColourSections.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`, `Editing/ComboColourEditingTest.cs`. |
 | `osu.Game.Rulesets.Osu(.Tests)/` | osu!standard. Fork additions: slider section angles (`Edit/Blueprints/Sliders/Components/SliderSectionAngleOverlay.cs`), `HitsoundEditingTest`, `HitsoundSampleProcessorTest`, `LazerTestLauncherTest`. |
 
-Outside the repo, handy for reading (not editable from inside this repo's tooling; use plain file reads):
+Outside the repo, handy for reading (not editable from inside this repo's tooling; use plain file reads). They aren't on every machine; without them, the framework's XML docs are in `~/.nuget/packages/ppy.osu.framework/<version>/lib/net10.0/osu.Framework.xml`:
 
 - `~/Github/osu-framework`: osu-framework source (`MouseHandler`, `DirectorySelector`, `Game.cs` key handling, ...).
 - `~/Github/osu-local`: a lazer checkout; read it to check what lazer itself does (importer, metadata lookup).
@@ -154,6 +155,7 @@ Executable lookup: `OsuSetting.LazerExecutable` (`game.ini`, empty by default), 
 - Data dir (Linux): `~/.local/share/osu-tryhard` (`osu-tryhard-development` in debug builds). Contains `client.realm`, `files/`, `framework.ini`, `game.ini`, `input.json`, `hitsounds/`, `rhythm/`, `exports/`, `logs/`.
 - Runtime logs: `logs/*.runtime.log` (exceptions show up as `[error]` lines with stack traces). A screen that loads blank almost always means an exception in a `[BackgroundDependencyLoader]`; check the log.
 - Moving the whole data dir: `storage.ini` in the default dir with `FullPath = /path` (`OsuStorage`). There is no "songs folder": maps are imported (copied) into the realm/file store; see README for drag & drop.
+- Also `combocolours/<BeatmapInfo.ID>.txt` (combo colour sections, 5.9).
 - Fork settings in `OsuSetting`: `HitsoundSamplesDirectory`, `LazerExecutable`, `MapsetVerifierPath`, `EditorTimelineShowRhythmStrip`, `EditorShowSliderSectionAngles`.
 - The editor persists realm-stored key bindings by int `GlobalAction`; never reorder or insert in the middle of that enum.
 
@@ -180,6 +182,16 @@ The Verify screen (upstream's, `IssueList`/`IssueTable`) runs [Mapset Verifier](
 - Flow (`IssueList.runMapsetVerifier`): MV reads a **folder**, so the set's files are written to `%TMP%/osu-tryhard-verify/<setId>/` (emptied first, otherwise old files show up as unused) with the open difficulty encoded from memory (`LegacyBeatmapEncoder` on `PlayableBeatmap`, so unsaved edits are checked, the other difficulties are the saved ones), then `POST /beatmap/runChecks {folder, createSnapshot:false}`. Use absolute paths: a relative one is resolved against the backend's cwd. One check that throws makes the whole run a 500 (the message is shown, built-in checks take over).
 - `MapsetVerifierIssues.Parse` turns the JSON into the upstream `Issue` type, so the table, filters and click-to-seek work unchanged: `general` -> `CheckScope.BeatmapSet`, the difficulty whose `category` equals `DifficultyName` -> `CheckScope.Difficulty`; levels Problem/Warning/Error map 1:1, Minor/Info/Check -> `Negligible` (hidden by default; Minor is the bulk of MV's output); a leading `mm:ss:fff (objects) - ` of the message becomes `Issue.Time` (and the objects at that time are attached, so a click selects them). `MapsetVerifierCheck` is the adapter `ICheck`; the table's category column shows its description (MV doesn't give categories). The interpreted-difficulty setting only affects the built-in checks.
 - Tests: `MapsetVerifierTest` (Osu.Tests: parsing, folder writer, and a run against the real backend that is ignored when MV isn't installed) and `TestSceneVerifyScreen`. The real-backend tests start MV on this machine; they stop it afterwards.
+
+### 5.9 Combo colour sections (`Screens/Edit/ComboColours/`, Setup > Colours)
+
+Lazer already has a per-combo colour picker (`NewComboTernaryButton`, writes `ComboOffset`); this adds what it lacks: colour *patterns over time*. Lives in the Setup screen's colours section, under the palette (no second palette UI anywhere).
+
+- `ComboColourSection(Time, Colours, Burst)`: from `Time` on, new combos cycle through `Colours` (0-based palette indices); a burst recolours only the first combo at/after its time and the cycle carries on as if it weren't there. No section, or an empty colour list = combos left alone. `TIME_LENIENCY` 1 ms.
+- Colour shown for a combo = `(ComboIndexWithOffsets - 1) mod n` (the palette is rotated by one in `EditorBeatmapSkin`), so the needed offset is `(desired - previousIndexWithOffsets) mod n`. `ComputeOffsets` / `ColourIndices` are pure; `GetComboStarts` detects starts by `ComboIndex` changing (so spinners/breaks follow the ruleset's own rules); `Apply` writes `ComboOffset`s as one undo step.
+- "Add section here" uses the **unsnapped** current time on purpose: snapping could land just after an unsnapped combo start. Seek with the bottom bar / arrow keys.
+- Sections are tool state saved on every change (`ComboColourSerializer`), not map content; the map only gets the offsets on Apply. The preview strip shows every combo's colour after applying.
+- Palette generator (same section): gradient first->last colour (HSV, short way round the hue circle), hue spread, shades. `ToHsv`/`FromHsv` are local (don't rely on framework HSV helpers).
 
 ## 6. Gotchas learned the hard way
 
