@@ -25,7 +25,9 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
     [Cached]
     public partial class Timeline : ZoomableScrollContainer
     {
-        private const float timeline_height = 80;
+        private readonly float timelineHeight;
+
+        private readonly bool showWaveform;
 
         private const float rhythm_strip_height = 14;
 
@@ -113,12 +115,14 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private double trackLengthForZoom;
 
-        public Timeline(Drawable userContent)
+        public Timeline(Drawable userContent, float timelineHeight = 80, bool showWaveform = true)
         {
             this.userContent = userContent;
+            this.timelineHeight = timelineHeight;
+            this.showWaveform = showWaveform;
 
             RelativeSizeAxes = Axes.X;
-            Height = timeline_height;
+            Height = timelineHeight;
 
             ZoomDuration = 200;
             ZoomEasing = Easing.OutQuint;
@@ -160,7 +164,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                 new Container
                 {
                     RelativeSizeAxes = Axes.X,
-                    Height = timeline_height,
+                    Height = timelineHeight,
                     Children = new[]
                     {
                         waveform = new WaveformGraph
@@ -204,7 +208,8 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private void updateWaveform()
         {
-            waveform.Waveform = beatmap.Value.Waveform;
+            if (showWaveform)
+                waveform.Waveform = beatmap.Value.Waveform;
             Scheduler.AddOnce(applyVisualOffset, beatmap);
         }
 
@@ -235,7 +240,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                 bool visible = showRhythmStrip && rhythmStripVisible.Value;
 
                 rhythmStrip!.Alpha = visible ? 1 : 0;
-                Height = timeline_height + (visible ? rhythm_strip_height : 0);
+                Height = timelineHeight + (visible ? rhythm_strip_height : 0);
             }, true);
 
             controlPointsVisible.BindValueChanged(visible =>
@@ -248,7 +253,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
         }
 
         private void updateWaveformOpacity() =>
-            waveform.FadeTo(waveformOpacity.Value, 200, Easing.OutQuint);
+            waveform.FadeTo(showWaveform ? waveformOpacity.Value : 0, 200, Easing.OutQuint);
 
         protected override void Update()
         {

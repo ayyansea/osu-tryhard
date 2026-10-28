@@ -195,6 +195,11 @@ namespace osu.Game.Localisation
         public static LocalisableString EditorRhythmMode => new TranslatableString(getKey(@"editor_rhythm_mode"), @"Rhythm mode");
 
         /// <summary>
+        /// "Hitsounds mode"
+        /// </summary>
+        public static LocalisableString EditorHitsoundsMode => new TranslatableString(getKey(@"editor_hitsounds_mode"), @"Hitsounds mode");
+
+        /// <summary>
         /// "Design mode"
         /// </summary>
         public static LocalisableString EditorDesignMode => new TranslatableString(getKey(@"editor_design_mode"), @"Design mode");

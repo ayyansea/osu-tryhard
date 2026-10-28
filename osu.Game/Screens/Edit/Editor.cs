@@ -50,6 +50,7 @@ using osu.Game.Screens.Edit.Components.Menus;
 using osu.Game.Screens.Edit.Compose;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osu.Game.Screens.Edit.Design;
+using osu.Game.Screens.Edit.Hitsounds;
 using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Screens.Edit.Timing;
@@ -94,7 +95,7 @@ namespace osu.Game.Screens.Edit
                 if (!canSave)
                     return false;
 
-                return lastSavedHash != changeHandler?.CurrentStateHash || editorRhythm?.HasUnsavedChanges == true;
+                return lastSavedHash != changeHandler?.CurrentStateHash || editorRhythm?.HasUnsavedChanges == true || editorHitsounds?.HasUnsavedChanges == true;
             }
         }
 
@@ -217,6 +218,7 @@ namespace osu.Game.Screens.Edit
         private Bindable<bool> editorTimelineShowRhythmStrip;
 
         private EditorRhythm editorRhythm;
+        private EditorHitsounds editorHitsounds;
         private Bindable<bool> editorTimelineShowTimingChanges;
         private Bindable<bool> editorTimelineShowBreaks;
         private Bindable<bool> editorTimelineShowTicks;
@@ -308,6 +310,8 @@ namespace osu.Game.Screens.Edit
 
             AddInternal(editorRhythm = new EditorRhythm(editorBeatmap));
             dependencies.Cache(editorRhythm);
+            AddInternal(editorHitsounds = new EditorHitsounds(editorBeatmap));
+            dependencies.Cache(editorHitsounds);
 
             beatDivisor.SetArbitraryDivisor(editorBeatmap.BeatmapInfo.BeatDivisor);
             beatDivisor.BindValueChanged(divisor => editorBeatmap.BeatmapInfo.BeatDivisor = divisor.NewValue);
@@ -609,6 +613,7 @@ namespace osu.Game.Screens.Edit
                 // save the loaded beatmap's data stream.
                 beatmapManager.Save(editorBeatmap.BeatmapInfo, editorBeatmap.PlayableBeatmap, editorBeatmap.BeatmapSkin, editorBeatmap.Storyboard);
                 editorRhythm.Save();
+                editorHitsounds.Save();
             }
             catch (Exception ex)
             {
@@ -768,6 +773,10 @@ namespace osu.Game.Screens.Edit
 
                 case GlobalAction.EditorRhythmMode:
                     screenSwitcher.SelectItem(EditorScreenMode.Rhythm);
+                    return true;
+
+                case GlobalAction.EditorHitsoundsMode:
+                    screenSwitcher.SelectItem(EditorScreenMode.Hitsounds);
                     return true;
 
                 case GlobalAction.EditorDesignMode:
@@ -1158,6 +1167,10 @@ namespace osu.Game.Screens.Edit
                         currentScreen = new RhythmScreen(editorRhythm);
                         break;
 
+                    case EditorScreenMode.Hitsounds:
+                        currentScreen = new HitsoundsScreen(editorHitsounds);
+                        break;
+
                     case EditorScreenMode.Design:
                         currentScreen = new DesignScreen();
                         break;
@@ -1332,6 +1345,7 @@ namespace osu.Game.Screens.Edit
         {
             lastSavedHash = changeHandler?.CurrentStateHash;
             editorRhythm?.MarkSaved();
+            editorHitsounds?.MarkSaved();
         }
 
         private IEnumerable<MenuItem> createFileMenuItems()

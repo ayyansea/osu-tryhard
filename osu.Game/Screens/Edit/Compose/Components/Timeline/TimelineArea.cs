@@ -20,15 +20,20 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private readonly Drawable userContent;
 
+        private readonly float timelineHeight;
+        private readonly bool showWaveform;
+
         private Box timelineBackground = null!;
         private readonly Bindable<bool> composerFocusMode = new Bindable<bool>();
 
-        public TimelineArea(Drawable? content = null)
+        public TimelineArea(Drawable? content = null, float timelineHeight = 80, bool showWaveform = true)
         {
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
 
             userContent = content ?? Empty();
+            this.timelineHeight = timelineHeight;
+            this.showWaveform = showWaveform;
         }
 
         [BackgroundDependencyLoader]
@@ -76,7 +81,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                                         Depth = float.MaxValue,
                                         Colour = colourProvider.Background5
                                     },
-                                    Timeline = new Timeline(userContent),
+                                    Timeline = new Timeline(userContent, timelineHeight, showWaveform),
                                 }
                             },
                             new Container

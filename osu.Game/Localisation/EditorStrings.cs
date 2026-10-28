@@ -111,6 +111,11 @@ namespace osu.Game.Localisation
         public static LocalisableString RhythmScreen => new TranslatableString(getKey(@"rhythm_screen"), @"rhythm");
 
         /// <summary>
+        /// "hitsounds"
+        /// </summary>
+        public static LocalisableString HitsoundsScreen => new TranslatableString(getKey(@"hitsounds_screen"), @"hitsounds");
+
+        /// <summary>
         /// "Show rhythm strip"
         /// </summary>
         public static LocalisableString TimelineShowRhythmStrip => new TranslatableString(getKey(@"timeline_show_rhythm_strip"), @"Show rhythm strip");
