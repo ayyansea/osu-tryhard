@@ -2,11 +2,15 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using NUnit.Framework;
 using osu.Game.Audio;
 using osu.Game.Beatmaps;
 using osu.Game.Beatmaps.ControlPoints;
+using osu.Game.Beatmaps.Formats;
+using osu.Game.IO;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Rulesets.Osu.Objects;
@@ -18,73 +22,107 @@ namespace osu.Game.Rulesets.Osu.Tests
     [TestFixture]
     public class HitsoundEditingTest
     {
+        private static readonly HitsoundLane soft_normal = new HitsoundLane(HitSampleInfo.BANK_SOFT, 1, HitSampleInfo.HIT_NORMAL);
+        private static readonly HitsoundLane drum_clap = new HitsoundLane(HitSampleInfo.BANK_DRUM, 1, HitSampleInfo.HIT_CLAP);
+        private static readonly HitsoundLane drum_clap_custom = new HitsoundLane(HitSampleInfo.BANK_DRUM, 3, HitSampleInfo.HIT_CLAP);
+
         [Test]
-        public void TestCircleAdditionToggle()
+        public void TestLaneToggle()
         {
-            var circle = new HitCircle { StartTime = 1000, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_SOFT) } };
+            var circle = new HitCircle { StartTime = 1000 };
             var moment = HitsoundEditing.GetMoments(circle).Single();
 
-            Assert.That(HitsoundEditing.SetAddition(moment, HitSampleInfo.HIT_CLAP, true), Is.True);
-            Assert.That(HitsoundEditing.Has(moment, HitSampleInfo.HIT_CLAP), Is.True);
-            Assert.That(circle.Samples.Single(s => s.Name == HitSampleInfo.HIT_CLAP).Bank, Is.EqualTo(HitSampleInfo.BANK_SOFT));
+            Assert.That(HitsoundEditing.SetLane(moment, soft_normal, true), Is.True);
+            Assert.That(HitsoundEditing.SetLane(moment, soft_normal, true), Is.False);
 
-            Assert.That(HitsoundEditing.SetAddition(moment, HitSampleInfo.HIT_CLAP, true), Is.False);
+            
+            // another normal replaces the soft one, whatever the bank.
+            var normal_normal = new HitsoundLane(HitSampleInfo.BANK_NORMAL, 1, HitSampleInfo.HIT_NORMAL);
+            Assert.That(HitsoundEditing.SetLane(moment, normal_normal, true), Is.True);
+            Assert.That(circle.Samples.Select(s => s.Bank + s.Name), Is.EqualTo(new[] { "normalhitnormal" }));
 
-            Assert.That(HitsoundEditing.SetAddition(moment, HitSampleInfo.HIT_CLAP, false), Is.True);
-            Assert.That(HitsoundEditing.Has(moment, HitSampleInfo.HIT_CLAP), Is.False);
+            // additions can use another bank than the normal sample.
+            var soft_whistle = new HitsoundLane(HitSampleInfo.BANK_SOFT, 1, HitSampleInfo.HIT_WHISTLE);
+            Assert.That(HitsoundEditing.SetLane(moment, soft_whistle, true), Is.True);
+            Assert.That(HitsoundEditing.SetLane(moment, drum_clap, true), Is.True);
+
+            // ... but all additions share a bank, so the last one placed wins.
+            Assert.That(circle.Samples.Select(s => s.Bank + s.Name), Is.EquivalentTo(new[] { "normalhitnormal", "drumhitclap" }));
+
+            // and the same addition in another bank is replaced too.
+            var drum_whistle = new HitsoundLane(HitSampleInfo.BANK_DRUM, 1, HitSampleInfo.HIT_WHISTLE);
+            Assert.That(HitsoundEditing.SetLane(moment, drum_whistle, true), Is.True);
+            Assert.That(circle.Samples.Select(s => s.Bank + s.Name), Is.EquivalentTo(new[] { "normalhitnormal", "drumhitclap", "drumhitwhistle" }));
+
+            // there is one sample set per object, so a custom set replaces everything else.
+            Assert.That(HitsoundEditing.SetLane(moment, drum_clap_custom, true), Is.True);
+            Assert.That(circle.Samples.Select(s => s.Bank + s.Name + s.Suffix), Is.EqualTo(new[] { "drumhitclap3" }));
+            Assert.That(HitsoundEditing.IsRepresentable(circle.Samples), Is.True);
+
+            Assert.That(HitsoundEditing.SetLane(moment, drum_clap_custom, false), Is.True);
+            Assert.That(circle.Samples, Is.Empty);
+            Assert.That(HitsoundEditing.SetLane(moment, drum_clap_custom, false), Is.False);
         }
 
         [Test]
-        public void TestSliderNodeAdditionInheritsNodeBank()
+        public void TestSliderNodesAreIndependent()
         {
-            var slider = new Slider
-            {
-                StartTime = 0,
-                RepeatCount = 1,
-                Path = new SliderPath(PathType.LINEAR, new[] { Vector2.Zero, new Vector2(100, 0) }),
-                Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL) },
-            };
-
-            slider.ApplyDefaults(new ControlPointInfo(), new BeatmapDifficulty());
-
+            var slider = createSlider();
             var moments = HitsoundEditing.GetMoments(slider).ToList();
+
             Assert.That(moments, Has.Count.EqualTo(3));
             Assert.That(moments[2].Time, Is.EqualTo(slider.EndTime).Within(1));
 
-            // give the first node a drum whistle, and the second node nothing.
-            slider.NodeSamples.Clear();
-            slider.NodeSamples.Add(new List<HitSampleInfo>
-            {
-                new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_DRUM),
-                new HitSampleInfo(HitSampleInfo.HIT_WHISTLE, HitSampleInfo.BANK_DRUM, editorAutoBank: false),
-            });
+            Assert.That(HitsoundEditing.SetLane(moments[1], drum_clap, true), Is.True);
 
-            // adding a clap to the first node follows the existing addition's bank.
-            Assert.That(HitsoundEditing.SetAddition(moments[0], HitSampleInfo.HIT_CLAP, true), Is.True);
-            Assert.That(slider.NodeSamples[0].Single(s => s.Name == HitSampleInfo.HIT_CLAP).Bank, Is.EqualTo(HitSampleInfo.BANK_DRUM));
-
-            // the other nodes are padded and unaffected.
-            Assert.That(HitsoundEditing.Has(moments[1], HitSampleInfo.HIT_CLAP), Is.False);
-            Assert.That(HitsoundEditing.Has(moments[2], HitSampleInfo.HIT_CLAP), Is.False);
-
-            // brush bank applies when the node has no addition yet.
-            Assert.That(HitsoundEditing.SetAddition(moments[1], HitSampleInfo.HIT_FINISH, true, HitSampleInfo.BANK_SOFT, "2"), Is.True);
-            var finish = slider.NodeSamples[1].Single(s => s.Name == HitSampleInfo.HIT_FINISH);
-            Assert.That(finish.Bank, Is.EqualTo(HitSampleInfo.BANK_SOFT));
-            Assert.That(finish.Suffix, Is.EqualTo("2"));
+            Assert.That(HitsoundEditing.Has(moments[0], drum_clap), Is.False);
+            Assert.That(HitsoundEditing.Has(moments[1], drum_clap), Is.True);
+            Assert.That(HitsoundEditing.Has(moments[2], drum_clap), Is.False);
         }
 
         [Test]
-        public void TestSetBankAndCycle()
+        public void TestLayoutLanesAndPaging()
         {
-            var circle = new HitCircle { Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_NORMAL) } };
-            var moment = HitsoundEditing.GetMoments(circle).Single();
+            var layout = new HitsoundLayout();
+            layout.SetSampleSets(new[] { 1, 3 });
 
-            Assert.That(HitsoundEditing.NextBank(HitsoundEditing.GetBank(moment)), Is.EqualTo(HitSampleInfo.BANK_SOFT));
-            Assert.That(HitsoundEditing.SetBank(moment, HitSampleInfo.BANK_DRUM), Is.True);
-            Assert.That(HitsoundEditing.GetBank(moment), Is.EqualTo(HitSampleInfo.BANK_DRUM));
-            Assert.That(HitsoundEditing.SetBank(moment, HitSampleInfo.BANK_DRUM), Is.False);
-            Assert.That(HitsoundEditing.NextBank(HitSampleInfo.BANK_DRUM), Is.EqualTo(HitSampleInfo.BANK_NORMAL));
+            // soft, normal, drum of the default set, then the same for set 3.
+            Assert.That(layout.SectionCount, Is.EqualTo(6));
+            Assert.That(layout.Rows, Has.Count.EqualTo(12));
+            Assert.That(layout.Rows[0].Lane, Is.EqualTo(new HitsoundLane(HitSampleInfo.BANK_SOFT, 1, HitSampleInfo.HIT_NORMAL)));
+            Assert.That(layout.Rows[4].Lane, Is.EqualTo(new HitsoundLane(HitSampleInfo.BANK_NORMAL, 1, HitSampleInfo.HIT_NORMAL)));
+
+            // the gap between two sections belongs to no lane.
+            Assert.That(layout.TryGetLane(HitsoundLayout.SECTION_HEIGHT - 1, out var last), Is.True);
+            Assert.That(last, Is.EqualTo(new HitsoundLane(HitSampleInfo.BANK_SOFT, 1, HitSampleInfo.HIT_CLAP)));
+            Assert.That(layout.TryGetLane(HitsoundLayout.SECTION_HEIGHT + 1, out _), Is.False);
+            Assert.That(layout.TryGetLane(HitsoundLayout.SECTION_HEIGHT + HitsoundLayout.SEPARATOR_HEIGHT + 1, out var first), Is.True);
+            Assert.That(first.Bank, Is.EqualTo(HitSampleInfo.BANK_NORMAL));
+
+            layout.ShowSampleSet(3);
+            Assert.That(layout.Rows[0].Lane, Is.EqualTo(new HitsoundLane(HitSampleInfo.BANK_SOFT, 3, HitSampleInfo.HIT_NORMAL)));
+
+            // can't scroll past the end.
+            layout.SectionOffset.Value = 100;
+            Assert.That(layout.SectionOffset.Value, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void TestSampleSetsFollowSteps()
+        {
+            var hitsounds = new EditorHitsounds(null!);
+            Assert.That(hitsounds.SampleSets, Is.EqualTo(new[] { 1 }));
+
+            var step = new HitsoundStep { StartTime = 100, Samples = { drum_clap_custom.Create() } };
+            hitsounds.Add(step);
+            Assert.That(hitsounds.SampleSets, Is.EqualTo(new[] { 1, 3 }));
+
+            hitsounds.RegisterSampleSets(new[] { 2 });
+            Assert.That(hitsounds.SampleSets, Is.EqualTo(new[] { 1, 2, 3 }));
+
+            // sets the UI registered stay, sets only used by steps go away with them.
+            hitsounds.Remove(step);
+            Assert.That(hitsounds.SampleSets, Is.EqualTo(new[] { 1, 2 }));
         }
 
         [Test]
@@ -96,6 +134,93 @@ namespace osu.Game.Rulesets.Osu.Tests
 
             Assert.That(read.StartTime, Is.EqualTo(1234.5));
             Assert.That(read.Samples, Is.EqualTo(step.Samples));
+        }
+
+        [Test]
+        public void TestMovePasteDelete()
+        {
+            var hitsounds = new EditorHitsounds(null!);
+            var a = new HitsoundStep { StartTime = 100, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL) } };
+            var b = new HitsoundStep { StartTime = 300, Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL, HitSampleInfo.BANK_DRUM) } };
+            hitsounds.Add(a);
+            hitsounds.Add(b);
+
+            hitsounds.SelectAll();
+            Assert.That(hitsounds.MoveSelected(-500), Is.EqualTo(-100)); // clamped at 0
+            Assert.That(new[] { a.StartTime, b.StartTime }, Is.EqualTo(new[] { 0.0, 200.0 }));
+
+            hitsounds.CopySelected();
+            hitsounds.Paste(1000);
+            Assert.That(hitsounds.Steps.Select(s => s.StartTime), Is.EqualTo(new[] { 0.0, 200.0, 1000.0, 1200.0 }));
+            Assert.That(hitsounds.Selected, Has.Count.EqualTo(2));
+
+            hitsounds.DeleteSelected();
+            Assert.That(hitsounds.Steps, Has.Count.EqualTo(2));
+        }
+
+        /// <summary>
+        /// Steps can hold any mix of lanes, but .osu files only have one normal bank, one addition bank and one sample set per hit object.
+        /// This documents what survives saving.
+        /// </summary>
+        [Test]
+        public void TestMixedSamplesSaveAndLoad()
+        {
+            var circle = new HitCircle { StartTime = 1000 };
+            HitsoundEditing.SetSamples(HitsoundEditing.GetMoments(circle).Single(), new List<HitSampleInfo>
+            {
+                soft_normal.Create(),
+                drum_clap.Create(),
+                drum_clap_custom.Create(),
+            });
+
+            var slider = createSlider();
+            var nodes = HitsoundEditing.GetMoments(slider).ToList();
+            HitsoundEditing.SetSamples(nodes[0], new List<HitSampleInfo> { soft_normal.Create(), drum_clap.Create() });
+            HitsoundEditing.SetSamples(nodes[1], new List<HitSampleInfo> { new HitsoundLane(HitSampleInfo.BANK_DRUM, 1, HitSampleInfo.HIT_NORMAL).Create() });
+            HitsoundEditing.SetSamples(nodes[2], new List<HitSampleInfo> { soft_normal.Create(), drum_clap_custom.Create() });
+
+            var beatmap = new Beatmap { BeatmapInfo = { Ruleset = new OsuRuleset().RulesetInfo } };
+            beatmap.ControlPointInfo.Add(0, new TimingControlPoint());
+            beatmap.HitObjects.Add(circle);
+            beatmap.HitObjects.Add(slider);
+
+            using var stream = new MemoryStream();
+
+            using (var writer = new StreamWriter(stream, Encoding.UTF8, 1024, true))
+                new LegacyBeatmapEncoder(beatmap, null, null).Encode(writer);
+
+            stream.Position = 0;
+
+            var decoded = new LegacyBeatmapDecoder().Decode(new LineBufferedReader(stream));
+
+            // per hit object / slider node, the set index is shared and a mix of banks collapses.
+            var decodedCircle = decoded.HitObjects[1];
+            var circleSamples = HitsoundEditing.GetMoments(decodedCircle).Single().Samples;
+            Assert.That(circleSamples.Select(s => s.Suffix).Distinct().Count(), Is.EqualTo(1));
+            Assert.That(circleSamples, Has.Count.LessThan(3));
+
+            var decodedNodes = HitsoundEditing.GetMoments(decoded.HitObjects[0]).ToList();
+            Assert.That(decodedNodes[0].Samples.Select(s => s.Bank + s.Name), Is.EquivalentTo(new[] { "softhitnormal", "drumhitclap" }));
+            Assert.That(decodedNodes[1].Samples.Select(s => s.Bank + s.Name), Is.EquivalentTo(new[] { "drumhitnormal" }));
+
+            // and the editor knows which steps are affected.
+            Assert.That(HitsoundEditing.IsRepresentable(slider.NodeSamples[0]), Is.True);
+            Assert.That(HitsoundEditing.IsRepresentable(slider.NodeSamples[2]), Is.False);
+            Assert.That(HitsoundEditing.IsRepresentable(circle.Samples), Is.False);
+        }
+
+        private static Slider createSlider()
+        {
+            var slider = new Slider
+            {
+                StartTime = 0,
+                RepeatCount = 1,
+                Path = new SliderPath(PathType.LINEAR, new[] { Vector2.Zero, new Vector2(100, 0) }),
+                Samples = { new HitSampleInfo(HitSampleInfo.HIT_NORMAL) },
+            };
+
+            slider.ApplyDefaults(new ControlPointInfo(), new BeatmapDifficulty());
+            return slider;
         }
     }
 }

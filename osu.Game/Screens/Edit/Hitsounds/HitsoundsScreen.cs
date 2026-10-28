@@ -1,34 +1,56 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions.Color4Extensions;
+using osu.Framework.Extensions.ObjectExtensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Input;
+using osu.Framework.Input.Bindings;
+using osu.Framework.Input.Events;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Containers;
 using osu.Game.Graphics.UserInterfaceV2;
+using osu.Game.Input.Bindings;
 using osu.Game.Overlays;
+using osu.Game.Rulesets.Edit;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
+using osu.Game.Screens.Edit.Setup;
 using osuTK;
-using osuTK.Graphics;
+using osuTK.Input;
 
 namespace osu.Game.Screens.Edit.Hitsounds
 {
     /// <summary>
-    /// An editor screen for hitsounding: a sample picker / previewer, and a pattern grid aligned to the timeline.
-    /// The pattern grid edits a hitsound track (see <see cref="EditorHitsounds"/>) which exists independently of the hit objects.
+    /// An editor screen for hitsounding: a grid of swimlanes (every sample of every bank of every sample set) aligned to the timeline,
+    /// and a panel to create custom sample sets and assign sound files to them.
+    /// The grid edits a hitsound track (see <see cref="EditorHitsounds"/>) which exists independently of the hit objects.
     /// </summary>
-    public partial class HitsoundsScreen : EditorScreen
+    public partial class HitsoundsScreen : EditorScreen, IKeyBindingHandler<GlobalAction>, IKeyBindingHandler<PlatformAction>
     {
         /// <summary>
-        /// The bank applied to newly painted additions and to the bank row. Null follows the normal bank (and makes the bank row cycle).
+        /// Whether clicking selects / moves steps instead of painting.
         /// </summary>
-        private readonly Bindable<string?> brushBank = new Bindable<string?>();
+        private readonly BindableBool selectMode = new BindableBool();
 
-        private readonly Bindable<int> brushSampleSet = new Bindable<int>(1);
+        private readonly HitsoundLayout layout = new HitsoundLayout();
+        private readonly Bindable<EditorBeatmapSkin.SampleSet?> currentSampleSet = new Bindable<EditorBeatmapSkin.SampleSet?>();
 
         private readonly EditorHitsounds hitsounds;
+
+        [Resolved]
+        private EditorClock clock { get; set; } = null!;
+
+        [Resolved]
+        private IBeatSnapProvider beatSnap { get; set; } = null!;
+
+        private RoundedButton paintButton = null!;
+        private RoundedButton selectButton = null!;
+        private FormSampleSetChooser sampleSetChooser = null!;
+        private OsuTextFlowContainer status = null!;
 
         public HitsoundsScreen(EditorHitsounds hitsounds)
             : base(EditorScreenMode.Hitsounds)
@@ -69,7 +91,26 @@ namespace osu.Game.Screens.Edit.Hitsounds
                             {
                                 new Drawable[]
                                 {
-                                    new HitsoundPicker(brushBank, brushSampleSet) { RelativeSizeAxes = Axes.X },
+                                    new FillFlowContainer
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        AutoSizeAxes = Axes.Y,
+                                        Direction = FillDirection.Vertical,
+                                        Spacing = new Vector2(6),
+                                        Padding = new MarginPadding(10),
+                                        Children = new Drawable[]
+                                        {
+                                            sampleSetChooser = new FormSampleSetChooser
+                                            {
+                                                Current = { BindTarget = currentSampleSet },
+                                            },
+                                            new HitsoundSampleSetPanel
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                Current = { BindTarget = currentSampleSet },
+                                            },
+                                        }
+                                    },
                                     new FillFlowContainer
                                     {
                                         RelativeSizeAxes = Axes.X,
@@ -79,10 +120,18 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                         Padding = new MarginPadding(10),
                                         Children = new Drawable[]
                                         {
-                                            legend = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12))
+                                            new FillFlowContainer
                                             {
-                                                RelativeSizeAxes = Axes.X,
-                                                AutoSizeAxes = Axes.Y,
+                                                AutoSizeAxes = Axes.Both,
+                                                Direction = FillDirection.Horizontal,
+                                                Spacing = new Vector2(8),
+                                                Children = new Drawable[]
+                                                {
+                                                    paintButton = new RoundedButton { Width = 96, Height = 28, Text = "paint (2)", Action = () => selectMode.Value = false },
+                                                    selectButton = new RoundedButton { Width = 96, Height = 28, Text = "select (1)", Action = () => selectMode.Value = true },
+                                                    new RoundedButton { Width = 110, Height = 28, Text = "lanes up", Action = () => layout.SectionOffset.Value-- },
+                                                    new RoundedButton { Width = 110, Height = 28, Text = "lanes down", Action = () => layout.SectionOffset.Value++ },
+                                                },
                                             },
                                             new FillFlowContainer
                                             {
@@ -91,9 +140,15 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                                 Spacing = new Vector2(8),
                                                 Children = new Drawable[]
                                                 {
-                                                    new RoundedButton { Width = 200, Height = 28, Text = "apply to hit objects", Action = hitsounds.ApplyToHitObjects },
+                                                    new RoundedButton { Width = 200, Height = 28, Text = "apply to hit objects", Action = apply },
                                                     new RoundedButton { Width = 200, Height = 28, Text = "import from hit objects", Action = hitsounds.ImportFromHitObjects },
                                                 },
+                                            },
+                                            status = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12)) { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y },
+                                            legend = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12))
+                                            {
+                                                RelativeSizeAxes = Axes.X,
+                                                AutoSizeAxes = Axes.Y,
                                             },
                                         }
                                     },
@@ -103,35 +158,194 @@ namespace osu.Game.Screens.Edit.Hitsounds
                     },
                     new Drawable[]
                     {
-                        new Container
+                        new GridContainer
                         {
                             RelativeSizeAxes = Axes.Both,
-                            Child = new TimelineArea(new HitsoundPatternEditor(hitsounds, brushBank, brushSampleSet) { RelativeSizeAxes = Axes.Both }, HitsoundPatternEditor.HEIGHT, false)
+                            ColumnDimensions = new[]
                             {
-                                Anchor = Anchor.Centre,
-                                Origin = Anchor.Centre,
+                                new Dimension(GridSizeMode.Absolute, HitsoundLaneLabels.WIDTH),
+                                new Dimension(),
                             },
+                            Content = new[]
+                            {
+                                new Drawable[]
+                                {
+                                    new Container
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        Child = new HitsoundLaneLabels(layout)
+                                        {
+                                            Anchor = Anchor.Centre,
+                                            Origin = Anchor.Centre,
+                                        },
+                                    },
+                                    new Container
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        Child = new TimelineArea(new HitsoundPatternEditor(hitsounds, layout, selectMode) { RelativeSizeAxes = Axes.Both }, HitsoundLayout.HEIGHT, false)
+                                        {
+                                            Anchor = Anchor.Centre,
+                                            Origin = Anchor.Centre,
+                                        },
+                                    },
+                                }
+                            }
                         },
                     },
                 }
             };
 
-            addLegend(legend, "bank row", "click to cycle normal / soft / drum, or to set the brush bank. ", CatppuccinMochaColourProvider.SAPPHIRE);
-            addLegend(legend, "whistle row", "toggle a whistle. ", CatppuccinMochaColourProvider.YELLOW);
-            addLegend(legend, "finish row", "toggle a finish. ", CatppuccinMochaColourProvider.RED);
-            addLegend(legend, "clap row", "toggle a clap.\n", CatppuccinMochaColourProvider.MAUVE);
-            legend.AddText("click anywhere in the grid (snaps to the beat divisor) to place a hitsound, drag to paint, right click to delete a step. play the track to audition.\n" +
+            selectMode.BindValueChanged(_ =>
+            {
+                paintButton.BackgroundColour = selectMode.Value ? CatppuccinMochaColourProvider.SURFACE1 : CatppuccinMochaColourProvider.MAUVE.Darken(0.4f);
+                selectButton.BackgroundColour = selectMode.Value ? CatppuccinMochaColourProvider.MAUVE.Darken(0.4f) : CatppuccinMochaColourProvider.SURFACE1;
+            }, true);
+
+            hitsounds.Selected.BindCollectionChanged((_, _) => updateClipboardActionAvailability(), true);
+
+            hitsounds.SampleSetsChanged += updateLayoutSampleSets;
+            updateLayoutSampleSets();
+
+            currentSampleSet.BindValueChanged(set =>
+            {
+                registerSampleSets();
+
+                if (set.NewValue != null && set.NewValue.SampleSetIndex > 0)
+                    layout.ShowSampleSet(set.NewValue.SampleSetIndex);
+            });
+
+            if (EditorBeatmap.BeatmapSkin != null)
+                EditorBeatmap.BeatmapSkin.BeatmapSkinChanged += scheduleRegisterSampleSets;
+
+
+            legend.AddText("paint tool (2): click or drag in a lane (snaps to the beat divisor) to place or erase that sound, right click deletes a step.\n" +
+                           "select tool (1): click a step, ctrl / shift click to add, drag empty space to box select, drag a selected step to move the selection, delete to delete, ctrl+a / x / c / v.\n" +
+                           "scroll over the lane names (or use lanes up / down) to see other banks and sample sets, click a lane name to hear it. play the track to audition.\n" +
                            "steps are independent of hit objects. \"apply to hit objects\" assigns them to objects at the same time (steps with no object are dropped); \"import\" replaces the steps with the objects' current samples.");
         }
 
-        private static void addLegend(OsuTextFlowContainer legend, string name, string description, Color4 colour)
+        protected override void LoadComplete()
         {
-            legend.AddText(name, s =>
+            base.LoadComplete();
+
+            // the chooser has to be loaded before its items can be read.
+            registerSampleSets();
+        }
+
+        private void apply()
+        {
+            int unrepresentable = hitsounds.ApplyToHitObjects();
+
+            status.Text = unrepresentable == 0
+                ? "applied."
+                : $"applied. {unrepresentable} hit object(s) / slider node(s) got a mix of banks or sample sets (red mark above the step) which a .osu file can't store exactly, only one normal bank, one addition bank and one sample set per object survive saving.";
+        }
+
+        private void updateLayoutSampleSets() => layout.SetSampleSets(hitsounds.SampleSets);
+
+        private void scheduleRegisterSampleSets() => Schedule(registerSampleSets);
+
+        /// <summary>
+        /// Makes sure lanes are shown for every sample set which has files or was just created.
+        /// </summary>
+        private void registerSampleSets()
+        {
+            var sets = EditorBeatmap.BeatmapSkin?.GetAvailableSampleSets().Select(s => s.SampleSetIndex) ?? Enumerable.Empty<int>();
+            var created = sampleSetChooser.Items.Where(i => i != null && i.SampleSetIndex > 0).Select(i => i!.SampleSetIndex);
+
+            hitsounds.RegisterSampleSets(sets.Concat(created));
+        }
+
+        #region Input
+
+        public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (e.Repeat || e.Action != GlobalAction.EditorSelectTool)
+                return false;
+
+            selectMode.Value = true;
+            return true;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<GlobalAction> e)
+        {
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<PlatformAction> e)
+        {
+            switch (e.Action)
             {
-                s.Colour = colour;
-                s.Font = OsuFont.GetFont(size: 12, weight: FontWeight.SemiBold);
-            });
-            legend.AddText(": " + description);
+                case PlatformAction.SelectAll:
+                    hitsounds.SelectAll();
+                    return true;
+
+                case PlatformAction.Delete:
+                    hitsounds.DeleteSelected();
+                    return true;
+            }
+
+            return false;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<PlatformAction> e)
+        {
+        }
+
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            if (e.Repeat || e.ControlPressed || e.AltPressed || e.SuperPressed || e.ShiftPressed || e.Key != Key.Number2)
+                return false;
+
+            selectMode.Value = false;
+            return true;
+        }
+
+        #endregion
+
+        #region Clipboard operations
+
+        public override void Cut()
+        {
+            if (!CanCut.Value)
+                return;
+
+            Copy();
+            hitsounds.DeleteSelected();
+        }
+
+        public override void Copy()
+        {
+            if (!CanCopy.Value)
+                return;
+
+            hitsounds.CopySelected();
+            updateClipboardActionAvailability();
+        }
+
+        public override void Paste()
+        {
+            if (!CanPaste.Value)
+                return;
+
+            hitsounds.Paste(beatSnap.SnapTime(clock.CurrentTime, null));
+        }
+
+        private void updateClipboardActionAvailability()
+        {
+            CanCut.Value = CanCopy.Value = hitsounds.Selected.Count > 0;
+            CanPaste.Value = hitsounds.Clipboard != null;
+        }
+
+        #endregion
+
+        protected override void Dispose(bool isDisposing)
+        {
+            hitsounds.SampleSetsChanged -= updateLayoutSampleSets;
+
+            if (EditorBeatmap.IsNotNull() && EditorBeatmap.BeatmapSkin != null)
+                EditorBeatmap.BeatmapSkin.BeatmapSkinChanged -= scheduleRegisterSampleSets;
+
+            base.Dispose(isDisposing);
         }
     }
 }

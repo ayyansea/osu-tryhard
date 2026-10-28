@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
@@ -35,15 +36,30 @@ namespace osu.Game.Screens.Edit.Hitsounds
     {
         public IReadOnlyList<HitsoundStep> Steps => steps;
 
+        public readonly BindableList<HitsoundStep> Selected = new BindableList<HitsoundStep>();
+
+        /// <summary>
+        /// The serialised steps last copied, if any.
+        /// </summary>
+        public string? Clipboard { get; private set; }
+
         public event Action<HitsoundStep>? StepAdded;
         public event Action<HitsoundStep>? StepRemoved;
         public event Action<HitsoundStep>? StepUpdated;
+
+        /// <summary>
+        /// The sample sets to show lanes for: the default set, sets registered by the UI (custom sets with files), and sets used by any step.
+        /// </summary>
+        public IReadOnlyList<int> SampleSets { get; private set; } = new[] { 1 };
+
+        public event Action? SampleSetsChanged;
 
         public EditorChangeHandler ChangeHandler { get; }
 
         public bool HasUnsavedChanges => lastSavedHash != null && ChangeHandler.CurrentStateHash != lastSavedHash;
 
         private readonly List<HitsoundStep> steps = new List<HitsoundStep>();
+        private readonly HashSet<int> registeredSampleSets = new HashSet<int> { 1 };
         private readonly EditorBeatmap editorBeatmap;
 
         private Storage storage = null!;
@@ -63,6 +79,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             storage = gameStorage.GetStorageForDirectory("hitsounds");
 
             steps.AddRange(readFromStorage());
+            refreshSampleSets();
             MarkSaved();
         }
 
@@ -78,6 +95,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
             int index = steps.FindIndex(s => s.StartTime > step.StartTime);
             steps.Insert(index < 0 ? steps.Count : index, step);
 
+            if (step.Samples.Any(s => !SampleSets.Contains(HitsoundLane.SampleSetOf(s.Suffix))))
+                refreshSampleSets();
+
             StepAdded?.Invoke(step);
             ChangeHandler.SaveState();
         }
@@ -87,8 +107,123 @@ namespace osu.Game.Screens.Edit.Hitsounds
             if (!steps.Remove(step))
                 return;
 
+            Selected.Remove(step);
+            refreshSampleSets();
             StepRemoved?.Invoke(step);
             ChangeHandler.SaveState();
+        }
+
+        /// <summary>
+        /// Makes sure lanes are shown for the given sample sets (e.g. custom sets which have sample files), even if no step uses them.
+        /// </summary>
+        public void RegisterSampleSets(IEnumerable<int> sampleSets)
+        {
+            int before = registeredSampleSets.Count;
+            registeredSampleSets.UnionWith(sampleSets);
+
+            if (registeredSampleSets.Count != before)
+                refreshSampleSets();
+        }
+
+        private void refreshSampleSets()
+        {
+            var all = registeredSampleSets.Union(steps.SelectMany(s => s.Samples).Select(s => HitsoundLane.SampleSetOf(s.Suffix))).OrderBy(i => i).ToList();
+
+            if (all.SequenceEqual(SampleSets))
+                return;
+
+            SampleSets = all;
+            SampleSetsChanged?.Invoke();
+        }
+
+        public void SelectAll()
+        {
+            Selected.Clear();
+            Selected.AddRange(steps);
+        }
+
+        public void DeleteSelected()
+        {
+            BeginChange();
+
+            foreach (var step in Selected.ToArray())
+                Remove(step);
+
+            EndChange();
+        }
+
+        /// <summary>
+        /// Moves the selected steps in time, never before 0.
+        /// </summary>
+        /// <returns>The delta that was actually applied.</returns>
+        public double MoveSelected(double delta)
+        {
+            if (Selected.Count == 0)
+                return 0;
+
+            delta = Math.Max(delta, -Selected.Min(s => s.StartTime));
+
+            if (delta == 0)
+                return 0;
+
+            foreach (var step in Selected)
+                step.StartTime += delta;
+
+            steps.Sort((a, b) => a.StartTime.CompareTo(b.StartTime));
+
+            foreach (var step in Selected.ToArray())
+                StepUpdated?.Invoke(step);
+
+            ChangeHandler.SaveState();
+            return delta;
+        }
+
+        /// <summary>
+        /// Removes unselected steps which a moved selection landed on.
+        /// </summary>
+        public void ResolveCollisions()
+        {
+            var times = Selected.Select(s => Math.Round(s.StartTime)).ToHashSet();
+
+            foreach (var step in steps.Where(s => !Selected.Contains(s) && times.Contains(Math.Round(s.StartTime))).ToArray())
+                Remove(step);
+        }
+
+        public void CopySelected() => Clipboard = Selected.Count == 0 ? null : HitsoundSerializer.Write(Selected);
+
+        /// <summary>
+        /// Pastes the clipboard with its first step at <paramref name="time"/>, replacing steps at the same times.
+        /// </summary>
+        public void Paste(double time)
+        {
+            if (Clipboard == null)
+                return;
+
+            var pasted = HitsoundSerializer.Read(Clipboard);
+
+            if (pasted.Count == 0)
+                return;
+
+            double offset = time - pasted.Min(s => s.StartTime);
+
+            BeginChange();
+
+            foreach (var step in pasted)
+            {
+                step.StartTime += offset;
+
+                var existing = FindStep(step.StartTime);
+
+                if (existing != null)
+                    Remove(existing);
+
+                Add(step);
+            }
+
+            Selected.Clear();
+            Selected.AddRange(pasted);
+
+            EndChange();
         }
 
         /// <summary>
@@ -102,11 +237,14 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         public void Replace(IEnumerable<HitsoundStep> newSteps)
         {
+            Selected.Clear();
+
             foreach (var step in steps.ToArray())
                 StepRemoved?.Invoke(step);
 
             steps.Clear();
             steps.AddRange(newSteps.OrderBy(s => s.StartTime));
+            refreshSampleSets();
 
             foreach (var step in steps.ToArray())
                 StepAdded?.Invoke(step);
@@ -143,8 +281,11 @@ namespace osu.Game.Screens.Edit.Hitsounds
         /// Assigns the samples of the steps to the beatmap's hit objects (and slider nodes) at matching times.
         /// Steps without an object are dropped, objects without a step are left untouched.
         /// </summary>
-        public void ApplyToHitObjects()
+        /// <returns>The number of hit objects / slider nodes which got samples that can't be saved exactly (see <see cref="HitsoundEditing.IsRepresentable"/>).</returns>
+        public int ApplyToHitObjects()
         {
+            int unrepresentable = 0;
+
             var byTime = new Dictionary<long, HitsoundStep>();
 
             foreach (var step in steps)
@@ -171,6 +312,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
                     HitsoundEditing.SetSamples(moment, step.Samples.Select(s => s.With()).ToList());
                     changed = true;
+
+                    if (!HitsoundEditing.IsRepresentable(step.Samples))
+                        unrepresentable++;
                 }
 
                 if (changed)
@@ -178,6 +322,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
             }
 
             editorBeatmap.EndChange();
+
+            return unrepresentable;
         }
 
         /// <summary>

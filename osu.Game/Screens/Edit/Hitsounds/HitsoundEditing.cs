@@ -18,8 +18,35 @@ namespace osu.Game.Screens.Edit.Hitsounds
     }
 
     /// <summary>
+    /// A swimlane of the hitsound grid: one sample (normal / whistle / finish / clap) of one bank in one sample set.
+    /// </summary>
+    /// <param name="Bank">The bank (soft / normal / drum).</param>
+    /// <param name="SampleSet">The sample set index. 1 is the default set, 2 and above are custom sets.</param>
+    /// <param name="Name">The sample name (<see cref="HitSampleInfo.HIT_NORMAL"/> and friends).</param>
+    public readonly record struct HitsoundLane(string Bank, int SampleSet, string Name)
+    {
+        public static string? SuffixOf(int sampleSet) => sampleSet >= 2 ? sampleSet.ToString() : null;
+
+        public static int SampleSetOf(string? suffix) => int.TryParse(suffix, out int set) && set >= 2 ? set : 1;
+
+        public bool Matches(HitSampleInfo sample) => sample.Name == Name && sample.Bank == Bank && SampleSetOf(sample.Suffix) == SampleSet;
+
+        /// <summary>
+        /// Whether the sample can't be saved to a .osu file together with this lane: there is one sample of each name, one addition bank and one sample set per hit object.
+        /// </summary>
+        public bool ConflictsWith(HitSampleInfo sample) => !Matches(sample)
+                                                          && (sample.Name == Name
+                                                              || SampleSetOf(sample.Suffix) != SampleSet
+                                                              || (Name != HitSampleInfo.HIT_NORMAL && sample.Name != HitSampleInfo.HIT_NORMAL && sample.Bank != Bank));
+
+        public HitSampleInfo Create() => new HitSampleInfo(Name, Bank, SuffixOf(SampleSet), editorAutoBank: false);
+
+        public string Label => $"{Bank} {Name.Replace("hit", string.Empty)}{(SampleSet >= 2 ? $" #{SampleSet}" : string.Empty)}";
+    }
+
+    /// <summary>
     /// Helpers for reading and mutating the samples of a <see cref="HitMoment"/>.
-    /// Mutations do not notify the editor beatmap; callers are expected to wrap them in a change and call <see cref="EditorBeatmap.Update"/>.
+    /// Mutations do not notify anything; callers are expected to do so.
     /// </summary>
     public static class HitsoundEditing
     {
@@ -36,9 +63,21 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 yield return new HitMoment(hitObject, 0, hitObject.GetEndTime());
         }
 
-        public static bool Has(HitMoment moment, string sampleName) => moment.Samples.Any(s => s.Name == sampleName);
+        public static bool Has(HitMoment moment, HitsoundLane lane) => moment.Samples.Any(lane.Matches);
 
-        public static string? GetBank(HitMoment moment) => (moment.Samples.FirstOrDefault(s => s.Name == HitSampleInfo.HIT_NORMAL) ?? moment.Samples.FirstOrDefault())?.Bank;
+        /// <summary>
+        /// Whether the samples survive saving as a .osu file, which only has one normal bank, one addition bank and one sample set per hit object (or slider node).
+        /// </summary>
+        public static bool IsRepresentable(IEnumerable<HitSampleInfo> samples)
+        {
+            var list = samples.ToList();
+            var additions = list.Where(s => s.Name != HitSampleInfo.HIT_NORMAL).ToList();
+
+            return list.Count(s => s.Name == HitSampleInfo.HIT_NORMAL) <= 1
+                   && additions.Select(s => s.Name).Distinct().Count() == additions.Count
+                   && additions.Select(s => s.Bank).Distinct().Count() <= 1
+                   && list.Select(s => HitsoundLane.SampleSetOf(s.Suffix)).Distinct().Count() <= 1;
+        }
 
         public static void SetSamples(HitMoment moment, IList<HitSampleInfo> samples)
         {
@@ -54,78 +93,26 @@ namespace osu.Game.Screens.Edit.Hitsounds
         }
 
         /// <summary>
-        /// Adds or removes a sample addition (whistle / finish / clap).
+        /// Adds or removes the sample of a lane. Adding replaces any samples which can't be saved together with it (see <see cref="HitsoundLane.ConflictsWith"/>), so that a step always stays stable compatible.
         /// </summary>
-        /// <param name="moment">The moment to change.</param>
-        /// <param name="sampleName">The addition to add or remove.</param>
-        /// <param name="on">Whether the addition should be present.</param>
-        /// <param name="bank">The bank for a newly added addition if the moment has no additions yet. If null, the moment's normal bank is followed.</param>
-        /// <param name="suffix">The sample set suffix used together with <paramref name="bank"/>.</param>
         /// <returns>Whether anything changed.</returns>
-        public static bool SetAddition(HitMoment moment, string sampleName, bool on, string? bank = null, string? suffix = null)
+        public static bool SetLane(HitMoment moment, HitsoundLane lane, bool on)
         {
             var samples = moment.Samples.ToList();
 
-            if (!on)
+            if (on)
             {
-                if (samples.RemoveAll(s => s.Name == sampleName) == 0)
+                if (samples.Any(lane.Matches))
                     return false;
 
-                SetSamples(moment, samples);
-                return true;
+                samples.RemoveAll(lane.ConflictsWith);
+                samples.Add(lane.Create());
             }
-
-            if (samples.Any(s => s.Name == sampleName))
+            else if (samples.RemoveAll(lane.Matches) == 0)
                 return false;
 
-            var existingAddition = samples.FirstOrDefault(s => s.Name != HitSampleInfo.HIT_NORMAL);
-            var normal = samples.FirstOrDefault(s => s.Name == HitSampleInfo.HIT_NORMAL);
-
-            HitSampleInfo created;
-
-            // as per stable, all additions at a moment share the same bank.
-            if (existingAddition != null)
-                created = existingAddition.With(newName: sampleName);
-            else if (normal != null)
-                created = normal.With(newName: sampleName, newEditorAutoBank: true);
-            else
-                created = new HitSampleInfo(sampleName);
-
-            if (existingAddition == null && bank != null)
-                created = created.With(newBank: bank, newSuffix: suffix, newEditorAutoBank: false);
-
-            samples.Add(created);
             SetSamples(moment, samples);
             return true;
-        }
-
-        /// <summary>
-        /// Sets the bank of the normal sample (and of any additions following it automatically).
-        /// </summary>
-        /// <returns>Whether anything changed.</returns>
-        public static bool SetBank(HitMoment moment, string bank, string? suffix = null)
-        {
-            var samples = moment.Samples.ToList();
-
-            if (!samples.Any(s => s.Name == HitSampleInfo.HIT_NORMAL))
-                samples.Insert(0, new HitSampleInfo(HitSampleInfo.HIT_NORMAL, bank, suffix));
-
-            var updated = samples.Select(s => s.Name == HitSampleInfo.HIT_NORMAL || s.EditorAutoBank ? s.With(newBank: bank, newSuffix: suffix) : s).ToList();
-
-            if (updated.SequenceEqual(moment.Samples))
-                return false;
-
-            SetSamples(moment, updated);
-            return true;
-        }
-
-        /// <summary>
-        /// Returns the bank after <paramref name="bank"/> when cycling normal -> soft -> drum.
-        /// </summary>
-        public static string NextBank(string? bank)
-        {
-            int index = bank == null ? -1 : System.Array.IndexOf(HitSampleInfo.ALL_BANKS, bank);
-            return HitSampleInfo.ALL_BANKS[(index + 1) % HitSampleInfo.ALL_BANKS.Length];
         }
     }
 }
