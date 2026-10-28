@@ -12,6 +12,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Game.Audio;
+using osu.Game.Beatmaps;
 using osu.Game.Rulesets.Objects;
 
 namespace osu.Game.Screens.Edit.Hitsounds
@@ -68,7 +69,10 @@ namespace osu.Game.Screens.Edit.Hitsounds
             ChangeHandler = new HitsoundChangeHandler(this);
         }
 
-        private string filename => $"{editorBeatmap.BeatmapInfo.ID}.txt";
+        // the track belongs to the whole set, as hitsounds are shared by all difficulties. (Tracks of single difficulties were stored before, keyed by the difficulty.)
+        private string filename => $"{editorBeatmap.BeatmapInfo.BeatmapSet?.ID ?? editorBeatmap.BeatmapInfo.ID}.txt";
+
+        private string legacyFilename => $"{editorBeatmap.BeatmapInfo.ID}.txt";
 
         [BackgroundDependencyLoader]
         private void load(Storage gameStorage)
@@ -419,6 +423,37 @@ namespace osu.Game.Screens.Edit.Hitsounds
         /// <returns>The number of hit objects / slider nodes which got samples that can't be saved exactly (see <see cref="HitsoundEditing.IsRepresentable"/>).</returns>
         public int ApplyToHitObjects()
         {
+            editorBeatmap.BeginChange();
+            int unrepresentable = applyTo(editorBeatmap.HitObjects.ToArray(), editorBeatmap.Update);
+            editorBeatmap.EndChange();
+
+            return unrepresentable;
+        }
+
+        /// <summary>
+        /// Does <see cref="ApplyToHitObjects"/> for the open difficulty, and then for every other difficulty of the set, which are saved right away.
+        /// </summary>
+        /// <returns>The number of difficulties which were applied to, and the number of hit objects / slider nodes with samples that can't be saved exactly.</returns>
+        public (int Difficulties, int Unrepresentable) ApplyToAllDifficulties(BeatmapManager beatmaps)
+        {
+            int unrepresentable = ApplyToHitObjects();
+            int difficulties = 1;
+
+            foreach (var other in editorBeatmap.BeatmapInfo.BeatmapSet?.Beatmaps.Where(b => !b.Equals(editorBeatmap.BeatmapInfo)).ToArray() ?? Array.Empty<BeatmapInfo>())
+            {
+                var working = beatmaps.GetWorkingBeatmap(other);
+                var playable = working.GetPlayableBeatmap(other.Ruleset);
+
+                unrepresentable += applyTo(playable.HitObjects, null);
+                beatmaps.Save(other, playable, working.GetSkin(), working.Storyboard);
+                difficulties++;
+            }
+
+            return (difficulties, unrepresentable);
+        }
+
+        private int applyTo(IEnumerable<HitObject> hitObjects, Action<HitObject>? onChanged)
+        {
             int unrepresentable = 0;
 
             var byTime = new Dictionary<long, HitsoundStep>();
@@ -432,9 +467,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 return byTime.GetValueOrDefault(key) ?? byTime.GetValueOrDefault(key - 1) ?? byTime.GetValueOrDefault(key + 1);
             }
 
-            editorBeatmap.BeginChange();
-
-            foreach (var hitObject in editorBeatmap.HitObjects.ToArray())
+            foreach (var hitObject in hitObjects)
             {
                 bool changed = false;
 
@@ -453,10 +486,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 }
 
                 if (changed)
-                    editorBeatmap.Update(hitObject);
+                    onChanged?.Invoke(hitObject);
             }
-
-            editorBeatmap.EndChange();
 
             return unrepresentable;
         }
@@ -491,10 +522,12 @@ namespace osu.Game.Screens.Edit.Hitsounds
         {
             try
             {
-                if (!storage.Exists(filename))
+                string name = storage.Exists(filename) ? filename : legacyFilename;
+
+                if (!storage.Exists(name))
                     return Array.Empty<HitsoundStep>();
 
-                using (var stream = storage.GetStream(filename))
+                using (var stream = storage.GetStream(name))
                 using (var reader = new StreamReader(stream))
                     return HitsoundSerializer.Read(reader.ReadToEnd());
             }

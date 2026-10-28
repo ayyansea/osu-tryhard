@@ -7,6 +7,7 @@ using osu.Framework.Bindables;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Extensions.ObjectExtensions;
 using osu.Framework.Graphics;
+using osu.Game.Beatmaps;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
@@ -49,6 +50,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         private RoundedButton paintButton = null!;
         private RoundedButton selectButton = null!;
+
+        [Resolved]
+        private BeatmapManager beatmaps { get; set; } = null!;
         private FormSampleSetChooser sampleSetChooser = null!;
         private OsuTextFlowContainer status = null!;
 
@@ -140,8 +144,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                                 Spacing = new Vector2(8),
                                                 Children = new Drawable[]
                                                 {
-                                                    new RoundedButton { Width = 200, Height = 28, Text = "apply to hit objects", Action = apply },
-                                                    new RoundedButton { Width = 200, Height = 28, Text = "import from hit objects", Action = hitsounds.ImportFromHitObjects },
+                                                    new RoundedButton { Width = 160, Height = 28, Text = "apply to this difficulty", Action = apply },
+                                                    new RoundedButton { Width = 160, Height = 28, Text = "apply to all difficulties", Action = applyToAll },
+                                                    new RoundedButton { Width = 180, Height = 28, Text = "import from this difficulty", Action = hitsounds.ImportFromHitObjects },
                                                 },
                                             },
                                             status = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12)) { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y },
@@ -222,7 +227,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
             legend.AddText("paint tool (2): click or drag in a lane (snaps to the beat divisor) to place or erase that sound, right click deletes a step.\n" +
                            "select tool (1): click a sound, ctrl / shift click to add, drag to box select the sounds of the lanes the box covers, double click a lane name to select its whole lane, drag a selected sound to move the selection, delete to delete, ctrl+a / x / c / v.\n" +
                            "scroll over the lane names (or use lanes up / down) to see other banks and sample sets, click a lane name to hear it. play the track to audition.\n" +
-                           "steps are independent of hit objects. \"apply to hit objects\" assigns them to objects at the same time (steps with no object are dropped); \"import\" replaces the steps with the objects' current samples.");
+                           "the hitsounds belong to the whole set and are independent of hit objects. \"apply\" assigns them to the objects at the same time (steps with no object are dropped), to this difficulty or to every difficulty of the set (which saves them); \"import\" replaces the hitsounds with this difficulty's current samples.");
         }
 
         protected override void LoadComplete()
@@ -233,13 +238,22 @@ namespace osu.Game.Screens.Edit.Hitsounds
             registerSampleSets();
         }
 
+        private void applyToAll()
+        {
+            var (difficulties, unrepresentable) = hitsounds.ApplyToAllDifficulties(beatmaps);
+
+            status.Text = $"applied to {difficulties} difficult{(difficulties == 1 ? "y" : "ies")}.{describeUnrepresentable(unrepresentable)}";
+        }
+
+        private static string describeUnrepresentable(int unrepresentable) => unrepresentable == 0
+            ? string.Empty
+            : $" {unrepresentable} hit object(s) / slider node(s) got a mix of banks or sample sets (red mark above the step) which a .osu file can't store exactly, only one normal bank, one addition bank and one sample set per object survive saving.";
+
         private void apply()
         {
             int unrepresentable = hitsounds.ApplyToHitObjects();
 
-            status.Text = unrepresentable == 0
-                ? "applied."
-                : $"applied. {unrepresentable} hit object(s) / slider node(s) got a mix of banks or sample sets (red mark above the step) which a .osu file can't store exactly, only one normal bank, one addition bank and one sample set per object survive saving.";
+            status.Text = $"applied.{describeUnrepresentable(unrepresentable)}";
         }
 
         private void updateLayoutSampleSets() => layout.SetSampleSets(hitsounds.SampleSets);
