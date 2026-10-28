@@ -41,12 +41,12 @@ Upstream's analyzers are errors in the build. Ones met so far:
 | `osu.Desktop/` | Desktop entry (`Program.cs`, `OsuGameDesktop.cs`). Game name `osu-tryhard` (`-development` in debug), friendly name `osu!tryhard editor`. |
 | `osu.Game/OsuEditorGame.cs` | The stripped game host. Start here. |
 | `osu.Game/Screens/EditorSelect/` | The beatmap/difficulty list screen shown on launch. |
-| `osu.Game/Screens/Edit/` | The editor (upstream) plus fork features: `Rhythm/`, `Hitsounds/`, `ComboColours/`, `LazerTestLauncher.cs`. |
+| `osu.Game/Screens/Edit/` | The editor (upstream) plus fork features: `Rhythm/`, `Hitsounds/`, `ComboColours/`, `MapCleaner/`, `LazerTestLauncher.cs`, `Components/EditorToolOverlay.cs` + `EditorOverlayHost.cs`. |
 | `osu.Game/Overlays/Volume/GlobalVolumeControl.cs` | Always visible volume sliders. |
 | `osu.Game/Input/Bindings/GlobalActionContainer.cs` | Key bindings and the `GlobalAction` enum. |
 | `osu.Game/Configuration/OsuConfigManager.cs` | `OsuSetting` enum and defaults (`game.ini`). |
 | `osu.Game/Tests/Visual/` | Test base classes living in the main assembly (`EditorTestScene`, `EditorSavingTestScene`). |
-| `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `TestSceneVerifyScreen.cs`, `TestSceneComboColourSections.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`, `Editing/ComboColourEditingTest.cs`. |
+| `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `TestSceneVerifyScreen.cs`, `TestSceneComboColourSections.cs`, `TestSceneMapCleaner.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`, `Editing/ComboColourEditingTest.cs`, `Editing/MapCleaningTest.cs`. |
 | `osu.Game.Rulesets.Osu(.Tests)/` | osu!standard. Fork additions: slider section angles (`Edit/Blueprints/Sliders/Components/SliderSectionAngleOverlay.cs`), `HitsoundEditingTest`, `HitsoundSampleProcessorTest`, `LazerTestLauncherTest`. |
 
 Outside the repo, handy for reading (not editable from inside this repo's tooling; use plain file reads). They aren't on every machine; without them, the framework's XML docs are in `~/.nuget/packages/ppy.osu.framework/<version>/lib/net10.0/osu.Framework.xml`:
@@ -72,7 +72,8 @@ Outside the repo, handy for reading (not editable from inside this repo's toolin
 ### 4.2 Editor structure (upstream, extended)
 
 - `Editor` (a screen) owns `EditorBeatmap` (the model being edited, with `BeginChange/EndChange/Update/Add/Remove`), `EditorClock`, `BindableBeatDivisor`, `EditorChangeHandler` (undo/redo by serialising state), menu bar, bottom bar, and a `screenContainer` with the mode screens.
-- Modes: `EditorScreenMode` (`SongSetup`, `Compose`, `Rhythm`, `Hitsounds`, `Design`, `Timing`, `Verify`). Keys: F1 compose, F2 design, F3 timing, F4 setup, F5 rhythm, F7 hitsounds, Ctrl+Shift+A verify, F8 test in lazer.
+- Modes: `EditorScreenMode` (`SongSetup`, `Compose`, `Rhythm`, `Hitsounds`, `Design`, `Timing`, `Verify`). Keys: F1 compose, F2 design, F3 timing, F4 setup, F5 rhythm, F7 hitsounds, Ctrl+Shift+A verify, F8 test in lazer, Ctrl+Shift+C clean up difficulty (any screen).
+- Tool overlays (`Components/EditorToolOverlay`): a dimmed panel over the whole editor (Escape / click outside closes, editor shortcuts are swallowed while open, volume keys pass through). They live in `EditorOverlayHost`, which `Editor` caches and puts above the menu and bottom bar; a screen that owns one adds it to the host in `LoadComplete`. Screens live as long as the editor, so nothing removes them.
 - A mode screen derives `EditorScreen` (or `EditorScreenWithTimeline`, which puts a `TimelineArea` on top and a main content area below). Screens are created lazily in `Editor.onModeChanged`.
 - **Undo/redo is per screen**: `EditorScreen.ChangeHandler` (virtual, null = the beatmap's). `Editor.activeChangeHandler` picks `currentScreen.ChangeHandler ?? changeHandler`. Rhythm and Hitsounds supply their own.
 - Unsaved changes: `Editor.HasUnsavedChanges` ORs the beatmap's handler with `editorRhythm` and `editorHitsounds`. `Save()` also calls `editorRhythm.Save()` / `editorHitsounds.Save()`; `updateLastSavedHash` marks them saved.
@@ -192,6 +193,15 @@ Lazer already has a per-combo colour picker (`NewComboTernaryButton`, writes `Co
 - "Add section here" uses the **unsnapped** current time on purpose: snapping could land just after an unsnapped combo start. Seek with the bottom bar / arrow keys.
 - Sections are tool state saved on every change (`ComboColourSerializer`), not map content; the map only gets the offsets on Apply. The preview strip shows every combo's colour after applying.
 - Palette generator (same section): gradient first->last colour (HSV, short way round the hue circle), hue spread, shades. `ToHsv`/`FromHsv` are local (don't rely on framework HSV helpers).
+
+### 5.10 Map cleaner (`Screens/Edit/MapCleaner/`, Edit > Clean up difficulty, Ctrl+Shift+C)
+
+`MapCleaning.Plan` returns `CleanupChange`s (time, description, apply action) without touching anything; the overlay lists them (click = seek) and `Apply` runs them as one undo step. Items:
+- Resnap objects: start, then end (sliders by scaling `ExpectedDistance`, so **no** velocity change, unlike upstream's "snap all notes" which scales SV; spinners by `Duration`). Only times between `MIN_RESNAP_DISTANCE` (1 ms) and the max distance (default 5 ms) are moved: closest snap over `PREDEFINED_DIVISORS` (includes 1/5, 1/7, 1/9), same as `CheckUnsnappedObjects`.
+- Resnap effect points and bookmarks (same rule).
+- Redundant timing points: same BPM and meter as the previous kept one, no omitted first bar line, on one of its bar lines. Red lines are never "redundant" to `ControlPointInfo.Add`, so this is the only place that finds them. (Effect point redundancy is already prevented on load/add, not handled.)
+- Combo colour skips: cleared on objects that don't start a combo, reduced mod palette size on ones that do (same colour).
+- `Slider.Duration`'s setter throws: match `IHasPath` before `IHasDuration`.
 
 ## 6. Gotchas learned the hard way
 

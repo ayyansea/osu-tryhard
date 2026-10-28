@@ -46,11 +46,13 @@ using osu.Game.Rulesets.Edit;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
 using osu.Game.Screens.Backgrounds;
+using osu.Game.Screens.Edit.Components;
 using osu.Game.Screens.Edit.Components.Menus;
 using osu.Game.Screens.Edit.Compose;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osu.Game.Screens.Edit.Design;
 using osu.Game.Screens.Edit.Hitsounds;
+using osu.Game.Screens.Edit.MapCleaner;
 using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Screens.Edit.Setup;
 using osu.Game.Screens.Edit.Timing;
@@ -219,6 +221,10 @@ namespace osu.Game.Screens.Edit
         private Bindable<string> lazerExecutable;
 
         private EditorRhythm editorRhythm;
+
+        private MapCleanerOverlay mapCleaner;
+
+        private EditorOverlayHost overlayHost;
         private EditorHitsounds editorHitsounds;
         private Bindable<bool> editorTimelineShowTimingChanges;
         private Bindable<bool> editorTimelineShowBreaks;
@@ -357,6 +363,10 @@ namespace osu.Game.Screens.Edit
                     editorAutoSeekOnPlacement.Value = false;
             });
 
+            // screens add their own overlays to this; it has to be cached before they load, so it exists before the layout below.
+            dependencies.Cache(overlayHost = new EditorOverlayHost());
+            overlayHost.Add(mapCleaner = new MapCleanerOverlay());
+
             AddInternal(new OsuContextMenuContainer
             {
                 RelativeSizeAxes = Axes.Both,
@@ -402,6 +412,8 @@ namespace osu.Game.Screens.Edit
                                             copyMenuItem = new EditorMenuItem(CommonStrings.Copy, MenuItemType.Standard, Copy) { Hotkey = new Hotkey(PlatformAction.Copy) },
                                             pasteMenuItem = new EditorMenuItem(CommonStrings.Paste, MenuItemType.Standard, Paste) { Hotkey = new Hotkey(PlatformAction.Paste) },
                                             cloneMenuItem = new EditorMenuItem(CommonStrings.Clone, MenuItemType.Standard, Clone) { Hotkey = new Hotkey(GlobalAction.EditorCloneSelection) },
+                                            new OsuMenuItemSpacer(),
+                                            new EditorMenuItem(EditorStrings.CleanUpDifficulty, MenuItemType.Standard, () => mapCleaner.Show()) { Hotkey = new Hotkey(GlobalAction.EditorMapCleaner) },
                                         }
                                     },
                                     new MenuItem(CommonStrings.MenuBarView)
@@ -487,6 +499,7 @@ namespace osu.Game.Screens.Edit
                     },
                     bottomBar = new BottomBar(),
                     MutationTracker,
+                    overlayHost,
                 }
             });
 
@@ -779,6 +792,13 @@ namespace osu.Game.Screens.Edit
 
                 case GlobalAction.EditorTestInLazer:
                     testInLazer();
+                    return true;
+
+                case GlobalAction.EditorMapCleaner:
+                    if (e.Repeat)
+                        return false;
+
+                    mapCleaner.ToggleVisibility();
                     return true;
 
                 case GlobalAction.EditorHitsoundsMode:

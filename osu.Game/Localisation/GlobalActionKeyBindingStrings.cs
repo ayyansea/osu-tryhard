@@ -201,6 +201,11 @@ namespace osu.Game.Localisation
         public static LocalisableString EditorTestInLazer => new TranslatableString(getKey(@"editor_test_in_lazer"), @"Test in osu!lazer");
 
         /// <summary>
+        /// "Clean up difficulty"
+        /// </summary>
+        public static LocalisableString EditorMapCleaner => new TranslatableString(getKey(@"editor_map_cleaner"), @"Clean up difficulty");
+
+        /// <summary>
         /// "Design mode"
         /// </summary>
         public static LocalisableString EditorDesignMode => new TranslatableString(getKey(@"editor_design_mode"), @"Design mode");
