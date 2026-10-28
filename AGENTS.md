@@ -47,7 +47,7 @@ Upstream's analyzers are errors in the build. Ones met so far:
 | `osu.Game/Configuration/OsuConfigManager.cs` | `OsuSetting` enum and defaults (`game.ini`). |
 | `osu.Game/Tests/Visual/` | Test base classes living in the main assembly (`EditorTestScene`, `EditorSavingTestScene`). |
 | `osu.Game.Tests/` | Game tests. Fork additions: `Visual/Editing/TestSceneHitsoundsScreen.cs`, `TestSceneHitsoundSampleFiles.cs`, `TestSceneRhythmScreen.cs`, `TestSceneVerifyScreen.cs`, `TestSceneComboColourSections.cs`, `TestSceneMapCleaner.cs`, `Database/LazerTestImportTest.cs`, `Editing/RhythmSerializerTest.cs`, `Editing/ComboColourEditingTest.cs`, `Editing/MapCleaningTest.cs`. |
-| `osu.Game.Rulesets.Osu(.Tests)/` | osu!standard. Fork additions: slider section angles (`Edit/Blueprints/Sliders/Components/SliderSectionAngleOverlay.cs`), `HitsoundEditingTest`, `HitsoundSampleProcessorTest`, `LazerTestLauncherTest`. |
+| `osu.Game.Rulesets.Osu(.Tests)/` | osu!standard. Fork additions: slider section angles (`Edit/Blueprints/Sliders/Components/SliderSectionAngleOverlay.cs`), slider gallery (`Edit/SliderGallery/`), `HitsoundEditingTest`, `HitsoundSampleProcessorTest`, `LazerTestLauncherTest`, `SliderShapeTest`, `Editor/TestSceneSliderGallery`. |
 
 Outside the repo, handy for reading (not editable from inside this repo's tooling; use plain file reads). They aren't on every machine; without them, the framework's XML docs are in `~/.nuget/packages/ppy.osu.framework/<version>/lib/net10.0/osu.Framework.xml`:
 
@@ -72,8 +72,8 @@ Outside the repo, handy for reading (not editable from inside this repo's toolin
 ### 4.2 Editor structure (upstream, extended)
 
 - `Editor` (a screen) owns `EditorBeatmap` (the model being edited, with `BeginChange/EndChange/Update/Add/Remove`), `EditorClock`, `BindableBeatDivisor`, `EditorChangeHandler` (undo/redo by serialising state), menu bar, bottom bar, and a `screenContainer` with the mode screens.
-- Modes: `EditorScreenMode` (`SongSetup`, `Compose`, `Rhythm`, `Hitsounds`, `Design`, `Timing`, `Verify`). Keys: F1 compose, F2 design, F3 timing, F4 setup, F5 rhythm, F7 hitsounds, Ctrl+Shift+A verify, F8 test in lazer, Ctrl+Shift+C clean up difficulty (any screen).
-- Tool overlays (`Components/EditorToolOverlay`): a dimmed panel over the whole editor (Escape / click outside closes, editor shortcuts are swallowed while open, volume keys pass through). They live in `EditorOverlayHost`, which `Editor` caches and puts above the menu and bottom bar; a screen that owns one adds it to the host in `LoadComplete`. Screens live as long as the editor, so nothing removes them.
+- Modes: `EditorScreenMode` (`SongSetup`, `Compose`, `Rhythm`, `Hitsounds`, `Design`, `Timing`, `Verify`). Keys: F1 compose, F2 design, F3 timing, F4 setup, F5 rhythm, F7 hitsounds, Ctrl+Shift+A verify, F8 test in lazer, Ctrl+Shift+C clean up difficulty (any screen), Ctrl+Shift+G slider gallery (compose only).
+- Tool overlays (`Components/EditorToolOverlay`): a dimmed panel over the whole editor (Escape / click outside closes, editor shortcuts are swallowed while open, volume keys pass through). They live in `EditorOverlayHost`, which `Editor` caches and puts above the menu and bottom bar; a screen that owns one (the composer's slider gallery) adds it to the host in `LoadComplete`. Screens live as long as the editor, so nothing removes them.
 - A mode screen derives `EditorScreen` (or `EditorScreenWithTimeline`, which puts a `TimelineArea` on top and a main content area below). Screens are created lazily in `Editor.onModeChanged`.
 - **Undo/redo is per screen**: `EditorScreen.ChangeHandler` (virtual, null = the beatmap's). `Editor.activeChangeHandler` picks `currentScreen.ChangeHandler ?? changeHandler`. Rhythm and Hitsounds supply their own.
 - Unsaved changes: `Editor.HasUnsavedChanges` ORs the beatmap's handler with `editorRhythm` and `editorHitsounds`. `Save()` also calls `editorRhythm.Save()` / `editorHitsounds.Save()`; `updateLastSavedHash` marks them saved.
@@ -156,7 +156,7 @@ Executable lookup: `OsuSetting.LazerExecutable` (`game.ini`, empty by default), 
 - Data dir (Linux): `~/.local/share/osu-tryhard` (`osu-tryhard-development` in debug builds). Contains `client.realm`, `files/`, `framework.ini`, `game.ini`, `input.json`, `hitsounds/`, `rhythm/`, `exports/`, `logs/`.
 - Runtime logs: `logs/*.runtime.log` (exceptions show up as `[error]` lines with stack traces). A screen that loads blank almost always means an exception in a `[BackgroundDependencyLoader]`; check the log.
 - Moving the whole data dir: `storage.ini` in the default dir with `FullPath = /path` (`OsuStorage`). There is no "songs folder": maps are imported (copied) into the realm/file store; see README for drag & drop.
-- Also `combocolours/<BeatmapInfo.ID>.txt` (combo colour sections, 5.9).
+- Also `combocolours/<BeatmapInfo.ID>.txt` (combo colour sections, 5.9) and `sliders/<shape id>.txt` (slider gallery, 5.11, shared by all maps).
 - Fork settings in `OsuSetting`: `HitsoundSamplesDirectory`, `LazerExecutable`, `MapsetVerifierPath`, `EditorTimelineShowRhythmStrip`, `EditorShowSliderSectionAngles`.
 - The editor persists realm-stored key bindings by int `GlobalAction`; never reorder or insert in the middle of that enum.
 
@@ -203,6 +203,16 @@ Lazer already has a per-combo colour picker (`NewComboTernaryButton`, writes `Co
 - Combo colour skips: cleared on objects that don't start a combo, reduced mod palette size on ones that do (same colour).
 - `Slider.Duration`'s setter throws: match `IHasPath` before `IHasDuration`.
 
+### 5.11 Slider gallery (`osu.Game.Rulesets.Osu/Edit/SliderGallery/`, compose only)
+
+A global library of slider shapes to place again, fitted to a duration.
+- `SliderShape`: control points relative to the head at real size, path types, `Length` (px), `RepeatCount`, `Beats` (duration in beats at the timing where it was saved), name, tags. One `key=value` text file per shape (`SliderShapeSerializer`), id = file name. `SliderGalleryStore` loads/saves/deletes them.
+- `SliderShapeFitting.Fit(slider, shape, duration, mode, velocity, transform, ...)`: `Scale` keeps the SV and scales the path (ExpectedDistance set exactly so the duration is exact); `KeepSize` keeps the path and changes the slider's SV, clamped to [0.1, 10] with the path trimmed/extended past that. Velocity comes from `slider.Velocity` after `ApplyDefaults` (so lazer's precision-adjusted beat length is respected). `SliderShapeTransform` = rotation + flips about the head (flip is applied before rotation; a screen flip toggles the flag and negates the rotation).
+- `SliderGallerySession` (one per composer): store, active shape, fit mode, duration source (`Shape` beats x beat length / `Rhythm` blueprint hold starting within 2 ms of the placement, falling back to the shape / fixed `Beats`), transform. Session-only (not persisted). ponytail: persist fit settings in `OsuSetting` if wanted.
+- `SliderGalleryCompositionTool` (the "Gallery" button in compose's tool list): without an active shape it opens the overlay and creates no placement. It's a **field** of `OsuHitObjectComposer`, because `CompositionTools` is read during the base class load, before the composer's own load gives it the session. `HitObjectComposer.SetTool` (fork addition) selects it; re-selecting the current tool doesn't recreate a placement, so `placeFromGallery` goes through the select tool first.
+- `SliderGalleryPlacementBlueprint`: head follows the cursor with circle-like snapping, refits when the start time or a setting changes, Ctrl+,/. rotate (90 deg, Shift 15), Ctrl+H/J flip (through a child `IKeyBindingHandler<GlobalAction>`, since `PlacementBlueprint.OnPressed` isn't virtual), sets `NodeSamples` on commit.
+- `SliderGalleryOverlay`: cards with `SliderShapeThumbnail`, search on name/tags, rename/tags (commit = save), place (also double click), apply to selected sliders (keeps each slider's start, duration and repeats), delete (dialog), open folder, reload. Saving: "Save selected sliders" there, or the selection context menu "Save to slider gallery".
+
 ## 6. Gotchas learned the hard way
 
 - **Bindable disposal**: disposing a drawable calls `UnbindAll()` on every `Bindable` held in its fields. If a popover/drawable stores a bindable *owned by someone else* (e.g. passes the same instance it was given), closing it silently unbinds all listeners of that bindable forever. Keep a callback (`Action<T>`) instead. (Caused "use this file does nothing after the first add".)
@@ -214,6 +224,8 @@ Lazer already has a per-combo colour picker (`NewComboTernaryButton`, writes `Co
 - Timeline mouse wheel is taken by the timeline (scroll/zoom): paging of anything else must live on buttons or on a non-timeline drawable.
 - `EditorSkinProvidingContainer(editorBeatmap)` must wrap any `SkinnableSound` that should resolve beatmap samples. Plain `SkinnableSound`s are not gated by the editor's `samplePlaybackDisabled`, which is why non-compose screens have to play audio themselves.
 - Dual keyboard handlers: `IKeyBindingHandler<GlobalAction>` + `IKeyBindingHandler<PlatformAction>` on one drawable is fine (hitsounds screen does it for select tool / select all / delete).
+- **Test beatmaps with sliders**: `ApplyDefaults` them in `CreateBeatmap`. A slider without defaults has velocity 0, so an infinite end time, so an infinite test track, and every timeline part throws "RelativeChildSize must be finite" on load.
+- `Bindable.Disabled` is shared by all bound copies: disabling a form control bound to a shared bindable disables it everywhere.
 - Hitsounds default key `F8` for "test in lazer" is also upstream's chat key; irrelevant here (no chat).
 
 ## 7. Testing notes

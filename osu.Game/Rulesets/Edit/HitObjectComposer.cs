@@ -425,6 +425,11 @@ namespace osu.Game.Rulesets.Edit
 
         public void SetLastTool() => (lastTool ?? toolboxCollection.Items.First()).Select();
 
+        /// <summary>
+        /// Selects the given tool, which must be one of <see cref="CompositionTools"/>.
+        /// </summary>
+        public void SetTool(CompositionTool tool) => toolboxCollection.Items.OfType<HitObjectCompositionToolButton>().Single(i => i.Tool == tool).Select();
+
         private void toolSelected(CompositionTool tool)
         {
             lastTool = toolboxCollection.Items.OfType<HitObjectCompositionToolButton>().FirstOrDefault(i => i.Tool == BlueprintContainer.CurrentTool);

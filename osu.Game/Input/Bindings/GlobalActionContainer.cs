@@ -134,6 +134,7 @@ namespace osu.Game.Input.Bindings
             new KeyBinding(new[] { InputKey.F7 }, GlobalAction.EditorHitsoundsMode),
             new KeyBinding(new[] { InputKey.F8 }, GlobalAction.EditorTestInLazer),
             new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.C }, GlobalAction.EditorMapCleaner),
+            new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.G }, GlobalAction.EditorSliderGallery),
             new KeyBinding(new[] { InputKey.Control, InputKey.Shift, InputKey.A }, GlobalAction.EditorVerifyMode),
             new KeyBinding(new[] { InputKey.Number1 }, GlobalAction.EditorSelectTool),
             new KeyBinding(new[] { InputKey.Q }, GlobalAction.EditorToggleNewCombo),
@@ -653,6 +654,9 @@ namespace osu.Game.Input.Bindings
 
         [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorMapCleaner))]
         EditorMapCleaner,
+
+        [LocalisableDescription(typeof(GlobalActionKeyBindingStrings), nameof(GlobalActionKeyBindingStrings.EditorSliderGallery))]
+        EditorSliderGallery,
     }
 
     public enum GlobalActionCategory

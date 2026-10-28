@@ -15,29 +15,35 @@ using osu.Framework.Caching;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
+using osu.Framework.Platform;
 using osu.Framework.Utils;
 using osu.Game.Beatmaps;
 using osu.Game.Graphics;
 using osu.Game.Graphics.Cursor;
 using osu.Game.Graphics.UserInterface;
+using osu.Game.Input.Bindings;
 using osu.Game.Rulesets.Edit;
 using osu.Game.Rulesets.Edit.Tools;
 using osu.Game.Rulesets.Mods;
 using osu.Game.Rulesets.Objects;
 using osu.Game.Rulesets.Objects.Types;
+using osu.Game.Rulesets.Osu.Edit.SliderGallery;
 using osu.Game.Rulesets.Osu.Objects;
 using osu.Game.Rulesets.Osu.UI;
 using osu.Game.Rulesets.UI;
+using osu.Game.Screens.Edit.Components;
 using osu.Game.Screens.Edit.Components.TernaryButtons;
 using osu.Game.Screens.Edit.Compose.Components;
+using osu.Game.Screens.Edit.Rhythm;
 using osuTK;
 using osuTK.Input;
 
 namespace osu.Game.Rulesets.Osu.Edit
 {
     [Cached]
-    public partial class OsuHitObjectComposer : HitObjectComposer<OsuHitObject, OsuAction>
+    public partial class OsuHitObjectComposer : HitObjectComposer<OsuHitObject, OsuAction>, IKeyBindingHandler<GlobalAction>
     {
         public OsuHitObjectComposer(Ruleset ruleset)
             : base(ruleset)
@@ -54,8 +60,21 @@ namespace osu.Game.Rulesets.Osu.Edit
             new HitCircleCompositionTool(),
             new SliderCompositionTool(),
             new SpinnerCompositionTool(),
-            new GridFromPointsTool()
+            new GridFromPointsTool(),
+            galleryTool,
         };
+
+        // tools are listed before load, so the tool exists from the start and gets its session in load.
+        private readonly SliderGalleryCompositionTool galleryTool = new SliderGalleryCompositionTool();
+
+        private SliderGallerySession gallerySession;
+        private SliderGalleryOverlay galleryOverlay;
+
+        [Resolved(canBeNull: true)]
+        private EditorOverlayHost overlayHost { get; set; }
+
+        [Resolved(canBeNull: true)]
+        private EditorRhythm editorRhythm { get; set; }
 
         private readonly Bindable<TernaryState> rectangularGridSnapToggle = new Bindable<TernaryState>();
 
@@ -90,8 +109,15 @@ namespace osu.Game.Rulesets.Osu.Edit
         protected readonly FreehandSliderToolboxGroup FreehandSliderToolboxGroup = new FreehandSliderToolboxGroup();
 
         [BackgroundDependencyLoader]
-        private void load()
+        private void load(Storage storage)
         {
+            gallerySession = new SliderGallerySession(new SliderGalleryStore(storage), () => editorRhythm?.Beatmap.HitObjects ?? Enumerable.Empty<HitObject>());
+            galleryTool.Session = gallerySession;
+            galleryOverlay = new SliderGalleryOverlay(gallerySession);
+
+            gallerySession.OpenRequested = () => galleryOverlay.Show();
+            gallerySession.PlaceRequested = placeFromGallery;
+
             AddInternal(DistanceSnapProvider);
             DistanceSnapProvider.AttachToToolbox(RightToolbox);
 
@@ -398,6 +424,48 @@ namespace osu.Game.Rulesets.Osu.Edit
             }
 
             return base.OnMouseDown(e);
+        }
+
+        protected override void LoadComplete()
+        {
+            base.LoadComplete();
+
+            // the gallery covers the whole editor, not just this screen. screens live as long as the editor, so it's never removed.
+            overlayHost?.Add(galleryOverlay);
+        }
+
+        /// <summary>
+        /// Saves the selected sliders to the slider gallery.
+        /// </summary>
+        public void SaveSelectionToGallery()
+        {
+            galleryOverlay.Show();
+            galleryOverlay.SaveSelection();
+        }
+
+        private void placeFromGallery(SliderShape shape)
+        {
+            gallerySession.ActiveShape.Value = shape;
+            galleryOverlay.Hide();
+
+            // re-selecting the current tool doesn't recreate its placement, which doesn't exist if the tool was picked without a shape.
+            if (BlueprintContainer.CurrentTool == galleryTool)
+                SetSelectTool();
+
+            SetTool(galleryTool);
+        }
+
+        public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
+        {
+            if (e.Action != GlobalAction.EditorSliderGallery || e.Repeat)
+                return false;
+
+            galleryOverlay.ToggleVisibility();
+            return true;
+        }
+
+        public void OnReleased(KeyBindingReleaseEvent<GlobalAction> e)
+        {
         }
 
         protected override bool OnKeyDown(KeyDownEvent e)

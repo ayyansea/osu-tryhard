@@ -27,6 +27,9 @@ namespace osu.Game.Rulesets.Osu.Edit
     public partial class OsuSelectionHandler : EditorSelectionHandler
     {
         [Resolved]
+        private OsuHitObjectComposer? composer { get; set; }
+
+        [Resolved]
         private OsuGridToolboxGroup gridToolbox { get; set; } = null!;
 
         protected override void OnSelectionChanged()
@@ -378,6 +381,9 @@ namespace osu.Game.Rulesets.Osu.Edit
 
             if (canMerge(selectedMergeableObjects))
                 yield return new OsuMenuItem("Merge selection", MenuItemType.Destructive, mergeSelection);
+
+            if (composer != null && selection.Any(b => b.Item is Slider))
+                yield return new OsuMenuItem("Save to slider gallery", MenuItemType.Standard, composer.SaveSelectionToGallery);
         }
 
         private bool canMerge(IReadOnlyList<OsuHitObject> objects) =>

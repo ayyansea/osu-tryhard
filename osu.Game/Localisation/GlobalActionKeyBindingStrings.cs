@@ -206,6 +206,11 @@ namespace osu.Game.Localisation
         public static LocalisableString EditorMapCleaner => new TranslatableString(getKey(@"editor_map_cleaner"), @"Clean up difficulty");
 
         /// <summary>
+        /// "Slider gallery"
+        /// </summary>
+        public static LocalisableString EditorSliderGallery => new TranslatableString(getKey(@"editor_slider_gallery"), @"Slider gallery");
+
+        /// <summary>
         /// "Design mode"
         /// </summary>
         public static LocalisableString EditorDesignMode => new TranslatableString(getKey(@"editor_design_mode"), @"Design mode");
