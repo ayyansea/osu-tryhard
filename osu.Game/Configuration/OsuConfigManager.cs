@@ -209,6 +209,7 @@ namespace osu.Game.Configuration
             SetDefault(OsuSetting.EditorShowSliderSectionAngles, true);
             SetDefault(OsuSetting.EditorTimelineShowRhythmStrip, true);
             SetDefault(OsuSetting.HitsoundSamplesDirectory, string.Empty);
+            SetDefault(OsuSetting.LazerExecutable, string.Empty);
             SetDefault(OsuSetting.EditorShowSpeedChanges, false);
             SetDefault(OsuSetting.EditorScaleOrigin, EditorOrigin.GridCentre);
             SetDefault(OsuSetting.EditorRotationOrigin, EditorOrigin.GridCentre);
@@ -503,5 +504,10 @@ namespace osu.Game.Configuration
         /// The folder the file chooser for custom hitsound samples starts in. Empty to use the default location.
         /// </summary>
         HitsoundSamplesDirectory,
+
+        /// <summary>
+        /// The osu!lazer executable (or AppImage) which the beatmap is sent to for testing. Empty to look in the usual places.
+        /// </summary>
+        LazerExecutable,
     }
 }

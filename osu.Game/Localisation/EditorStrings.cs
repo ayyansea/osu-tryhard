@@ -91,6 +91,11 @@ namespace osu.Game.Localisation
         public static LocalisableString EditExternally => new TranslatableString(getKey(@"edit_externally"), @"Edit externally...");
 
         /// <summary>
+        /// "Test in osu!lazer"
+        /// </summary>
+        public static LocalisableString TestInLazer => new TranslatableString(getKey(@"test_in_lazer"), @"Test in osu!lazer");
+
+        /// <summary>
         /// "Submit beatmap..."
         /// </summary>
         public static LocalisableString SubmitBeatmap => new TranslatableString(getKey(@"submit_beatmap"), @"Submit beatmap...");

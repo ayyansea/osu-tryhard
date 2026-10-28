@@ -216,6 +216,7 @@ namespace osu.Game.Screens.Edit
         private Bindable<bool> editorLimitedDistanceSnap;
         private Bindable<bool> editorShowSliderSectionAngles;
         private Bindable<bool> editorTimelineShowRhythmStrip;
+        private Bindable<string> lazerExecutable;
 
         private EditorRhythm editorRhythm;
         private EditorHitsounds editorHitsounds;
@@ -338,6 +339,7 @@ namespace osu.Game.Screens.Edit
             editorLimitedDistanceSnap = config.GetBindable<bool>(OsuSetting.EditorLimitedDistanceSnap);
             editorShowSliderSectionAngles = config.GetBindable<bool>(OsuSetting.EditorShowSliderSectionAngles);
             editorTimelineShowRhythmStrip = config.GetBindable<bool>(OsuSetting.EditorTimelineShowRhythmStrip);
+            lazerExecutable = config.GetBindable<string>(OsuSetting.LazerExecutable);
             editorTimelineShowTimingChanges = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTimingChanges);
             editorTimelineShowBreaks = config.GetBindable<bool>(OsuSetting.EditorTimelineShowBreaks);
             editorTimelineShowTicks = config.GetBindable<bool>(OsuSetting.EditorTimelineShowTicks);
@@ -773,6 +775,10 @@ namespace osu.Game.Screens.Edit
 
                 case GlobalAction.EditorRhythmMode:
                     screenSwitcher.SelectItem(EditorScreenMode.Rhythm);
+                    return true;
+
+                case GlobalAction.EditorTestInLazer:
+                    testInLazer();
                     return true;
 
                 case GlobalAction.EditorHitsoundsMode:
@@ -1369,6 +1375,8 @@ namespace osu.Game.Screens.Edit
             saveRelatedMenuItems.AddRange(export.Items);
             yield return export;
 
+            yield return new EditorMenuItem(EditorStrings.TestInLazer, MenuItemType.Standard, testInLazer) { Hotkey = new Hotkey(GlobalAction.EditorTestInLazer) };
+
             if (RuntimeInfo.IsDesktop)
             {
                 var externalEdit = new EditorMenuItem(EditorStrings.EditExternally, MenuItemType.Standard, editExternally)
@@ -1394,6 +1402,23 @@ namespace osu.Game.Screens.Edit
 
             return new EditorMenuItem(CommonStrings.Export) { Items = exportItems };
         }
+
+        /// <summary>
+        /// Saves, and sends the set to osu!lazer to be tested there (see <see cref="LazerTestLauncher"/>).
+        /// </summary>
+        private void testInLazer() => attemptMutationOperation(() =>
+        {
+            if (!Save())
+                return false;
+
+            string error = LazerTestLauncher.Launch(Beatmap.Value, lazerExecutable.Value);
+
+            notifications?.Post(error == null
+                ? new SimpleNotification { Text = "Sent the beatmap to osu!lazer, it replaces the copy from last time." }
+                : new SimpleErrorNotification { Text = error });
+
+            return true;
+        });
 
         private void editExternally()
         {

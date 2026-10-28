@@ -198,6 +198,7 @@ namespace osu.Game.Localisation
         /// "Hitsounds mode"
         /// </summary>
         public static LocalisableString EditorHitsoundsMode => new TranslatableString(getKey(@"editor_hitsounds_mode"), @"Hitsounds mode");
+        public static LocalisableString EditorTestInLazer => new TranslatableString(getKey(@"editor_test_in_lazer"), @"Test in osu!lazer");
 
         /// <summary>
         /// "Design mode"
