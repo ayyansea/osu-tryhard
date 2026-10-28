@@ -2,6 +2,7 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
@@ -63,7 +64,14 @@ namespace osu.Game.Screens.EditorSelect
         [Resolved]
         private IDialogOverlay? dialogOverlay { get; set; }
 
-        private IBindableList<BeatmapSetInfo> allSets = null!;
+        [Resolved]
+        private RealmAccess realm { get; set; } = null!;
+
+        // The beatmap store is only used as a change trigger: its detached copies can be out of date after the editor saves,
+        // so the list shown is always read straight from realm.
+        private IBindableList<BeatmapSetInfo> storeSets = null!;
+
+        private List<BeatmapSetInfo> allSets = new List<BeatmapSetInfo>();
 
         private readonly BindableList<BeatmapSetInfo> filteredSets = new BindableList<BeatmapSetInfo>();
 
@@ -78,7 +86,7 @@ namespace osu.Game.Screens.EditorSelect
         [BackgroundDependencyLoader]
         private void load(BeatmapStore beatmapStore, OsuColour colours)
         {
-            allSets = beatmapStore.GetBeatmapSets(null);
+            storeSets = beatmapStore.GetBeatmapSets(null);
 
             RelativeSizeAxes = Axes.Both;
 
@@ -309,23 +317,44 @@ namespace osu.Game.Screens.EditorSelect
                     }),
                 });
             }
+
+            newBeatmapButtons.Add(new RoundedButton
+            {
+                Anchor = Anchor.CentreLeft,
+                Origin = Anchor.CentreLeft,
+                Width = 80,
+                Height = 30,
+                Margin = new MarginPadding { Left = 15 },
+                Text = "refresh",
+                Action = refresh,
+            });
+        }
+
+        private void refresh()
+        {
+            allSets = realm.Run(r => r.All<BeatmapSetInfo>().Where(s => !s.DeletePending && !s.Protected).Detach());
+
+            updateFilter();
+            updateDifficulties();
         }
 
         protected override void LoadComplete()
         {
             base.LoadComplete();
 
-            allSets.BindCollectionChanged((_, _) => Scheduler.AddOnce(updateFilter));
+            storeSets.BindCollectionChanged((_, _) => Scheduler.AddOnce(refresh));
             searchTextBox.Current.BindValueChanged(_ => Scheduler.AddOnce(updateFilter));
             SelectedSet.BindValueChanged(_ => updateDifficulties());
 
-            updateFilter();
-            updateDifficulties();
+            refresh();
         }
 
         public override void OnResuming(ScreenTransitionEvent e)
         {
             base.OnResuming(e);
+
+            // the editor may have saved changes (eg. a renamed difficulty) while this screen was suspended.
+            refresh();
 
             // don't keep playing the track of the beatmap which was being edited.
             musicController.Stop();
@@ -379,7 +408,9 @@ namespace osu.Game.Screens.EditorSelect
         {
             difficultyFlow.Clear();
 
-            var set = SelectedSet.Value;
+            // BeatmapSetInfo equality is by ID, so assigning a fresh model to SelectedSet is a no-op and it keeps the stale one.
+            // always display the most recent model.
+            var set = allSets.FirstOrDefault(s => s.ID == SelectedSet.Value?.ID) ?? SelectedSet.Value;
 
             deleteButton.Enabled.Value = set != null;
 

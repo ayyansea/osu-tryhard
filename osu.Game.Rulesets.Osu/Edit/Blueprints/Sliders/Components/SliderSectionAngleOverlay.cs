@@ -177,23 +177,20 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders.Components
 
         /// <summary>
         /// Returns the angle of the section going from <paramref name="start"/> to <paramref name="end"/>, in degrees.
-        /// The angle is measured counter-clockwise from the positive X axis, as displayed on screen, and is in the range [0, 360).
+        /// The angle is the inclination of the section from the horizontal axis, in the range [0, 90]
+        /// (direction is ignored, so a section pointing left is treated the same as one pointing right).
         /// </summary>
         public static float GetSectionAngle(Vector2 start, Vector2 end)
         {
             Vector2 direction = end - start;
 
-            // Playfield Y coordinates point downwards, so flip them to get the angle as it appears on screen.
-            float angle = MathHelper.RadiansToDegrees(MathF.Atan2(-direction.Y, direction.X));
+            // Abs also folds the sign of Y (and turns negative zero into positive zero).
+            float angle = MathHelper.RadiansToDegrees(MathF.Atan2(Math.Abs(direction.Y), Math.Abs(direction.X)));
 
-            // Normalise to [0, 360). This also turns negative zero (from a section pointing right) into positive zero.
-            angle = (angle % 360 + 360) % 360;
-
-            // Avoid displaying 360° for angles which round up to it.
-            return MathF.Round(angle, 1) >= 360 ? 0 : angle;
+            return angle;
         }
 
-        public static string FormatAngle(float angle) => $"{angle.ToString("0.#", CultureInfo.InvariantCulture)}°";
+        public static string FormatAngle(float angle, int decimals = 0) => $"{angle.ToString($"F{decimals}", CultureInfo.InvariantCulture)}°";
 
         public partial class SectionAngleIndicator : CompositeDrawable
         {
@@ -203,6 +200,14 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders.Components
             public bool IsCallout { get; private set; }
 
             public string Text => text.Text.ToString();
+
+            /// <summary>
+            /// How far (in playfield units) the cursor must be on the label's side of the section before the label moves to the other side.
+            /// </summary>
+            private const float side_switch_distance = 20;
+
+            // The side of the section the label was last placed on. Starts above the section.
+            private Vector2 labelSide = new Vector2(0, -1);
 
             private readonly Box sectionHighlight;
             private readonly Box pointer;
@@ -271,9 +276,16 @@ namespace osu.Game.Rulesets.Osu.Edit.Blueprints.Sliders.Components
                 sectionHighlight.Rotation = MathHelper.RadiansToDegrees(MathF.Atan2(section.Y, section.X));
 
                 // Place the label on the side of the section facing away from the cursor, so that it doesn't get in the way.
+                // The side is sticky: it only switches once the cursor is clearly on the label's side, otherwise it flickers
+                // when the cursor is on (or near) the section, e.g. while placing a slider.
                 Vector2 normal = new Vector2(-direction.Y, direction.X);
-                if (Vector2.Dot(cursor - midpoint, normal) > 0)
+                if (Vector2.Dot(normal, labelSide) < 0)
                     normal = -normal;
+
+                if (Vector2.Dot(cursor - midpoint, normal) > side_switch_distance)
+                    normal = -normal;
+
+                labelSide = normal;
 
                 Vector2 labelSize = label.DrawSize;
 
