@@ -9,6 +9,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Configuration;
+using osu.Framework.Input;
+using osu.Framework.Input.Handlers.Mouse;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Input.Bindings;
@@ -17,6 +19,7 @@ using osu.Framework.Logging;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Framework.Threading;
+using osuTK.Input;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
 using osu.Game.Input.Bindings;
@@ -70,6 +73,12 @@ namespace osu.Game
 
         protected override IBeatmapUpdater CreateBeatmapUpdater() => new BeatmapUpdater(BeatmapManager, DifficultyCache);
 
+        protected override IDictionary<FrameworkSetting, object> GetFrameworkConfigDefaults() => new Dictionary<FrameworkSetting, object>
+        {
+            { FrameworkSetting.WindowMode, WindowMode.Borderless },
+            { FrameworkSetting.ConfineMouseMode, ConfineMouseMode.Never },
+        };
+
         public override void SetHost(GameHost host)
         {
             base.SetHost(host);
@@ -116,6 +125,14 @@ namespace osu.Game
 
             // RealmAccess is cached by OsuGameBase's loader into the child container, which isn't visible to this class's own loader parameters.
             removeObsoleteKeyBindings(dependencies.Get<RealmAccess>());
+
+            // start in borderless fullscreen regardless of what was used last (F11 / Alt+Enter toggle windowed mode), and never hold on to the cursor:
+            // neither confine it to the window nor use relative mouse input, which is what keeps it from leaving the window.
+            frameworkConfig.SetValue(FrameworkSetting.WindowMode, WindowMode.Borderless);
+            frameworkConfig.SetValue(FrameworkSetting.ConfineMouseMode, ConfineMouseMode.Never);
+
+            if (Host?.AvailableInputHandlers.OfType<MouseHandler>().SingleOrDefault() is MouseHandler mouseHandler)
+                mouseHandler.UseRelativeMode.Value = false;
 
             BeatmapManager.PostNotification = n => notifications.Post(n);
             SkinManager.PostNotification = n => notifications.Post(n);
@@ -247,6 +264,18 @@ namespace osu.Game
             });
 
             return component;
+        }
+
+        protected override bool OnKeyDown(KeyDownEvent e)
+        {
+            if (!e.Repeat && !e.ControlPressed && !e.ShiftPressed && (e.Key == Key.F11 || (e.Key == Key.Enter && e.AltPressed)))
+            {
+                var mode = frameworkConfig.GetBindable<WindowMode>(FrameworkSetting.WindowMode);
+                mode.Value = mode.Value == WindowMode.Windowed ? WindowMode.Borderless : WindowMode.Windowed;
+                return true;
+            }
+
+            return base.OnKeyDown(e);
         }
 
         public bool OnPressed(KeyBindingPressEvent<GlobalAction> e)
