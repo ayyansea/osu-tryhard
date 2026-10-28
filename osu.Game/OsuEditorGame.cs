@@ -22,6 +22,7 @@ using osu.Game.Database;
 using osu.Game.Input.Bindings;
 using osu.Game.Online.API;
 using osu.Game.Overlays;
+using osu.Game.Overlays.Volume;
 using osu.Game.Screens;
 using osu.Game.Screens.EditorSelect;
 using osu.Game.Screens.Menu;
@@ -81,14 +82,12 @@ namespace osu.Game
         }
 
         [BackgroundDependencyLoader]
-        private void load(RealmAccess realm)
+        private void load()
         {
             if (API is Drawable apiDrawable)
                 Add(apiDrawable);
 
             dependencies.CacheAs(osuLogo = new OsuLogo { Alpha = 0 });
-
-            removeObsoleteKeyBindings(realm);
         }
 
         /// <summary>
@@ -115,6 +114,9 @@ namespace osu.Game
         {
             base.LoadComplete();
 
+            // RealmAccess is cached by OsuGameBase's loader into the child container, which isn't visible to this class's own loader parameters.
+            removeObsoleteKeyBindings(dependencies.Get<RealmAccess>());
+
             BeatmapManager.PostNotification = n => notifications.Post(n);
             SkinManager.PostNotification = n => notifications.Post(n);
             ScoreManager.PostNotification = n => notifications.Post(n);
@@ -137,6 +139,7 @@ namespace osu.Game
             loadComponentSingleFile<BeatmapStore>(new RealmDetachedBeatmapStore(), Add, true);
 
             loadComponentSingleFile(volume = new VolumeOverlay(), overlayContent.Add, true);
+            loadComponentSingleFile(new GlobalVolumeControl(), overlayContent.Add);
 
             onScreenDisplay = new OnScreenDisplay();
             onScreenDisplay.BeginTracking(this, frameworkConfig);
