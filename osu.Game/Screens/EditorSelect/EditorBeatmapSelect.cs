@@ -4,11 +4,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
 using osu.Framework.Screens;
 using osu.Game.Beatmaps;
 using osu.Game.Database;
@@ -80,6 +83,8 @@ namespace osu.Game.Screens.EditorSelect
         private OsuSpriteText selectedSetText = null!;
         private FillFlowContainer<DifficultyRow> difficultyFlow = null!;
         private RoundedButton deleteButton = null!;
+        private Container backgroundContainer = null!;
+        private int backgroundRequest;
 
         protected override BackgroundScreen CreateBackground() => new BackgroundScreenBlack();
 
@@ -99,6 +104,7 @@ namespace osu.Game.Screens.EditorSelect
                     RelativeSizeAxes = Axes.Both,
                     Colour = colourProvider.Background5,
                 },
+                backgroundContainer = new Container { RelativeSizeAxes = Axes.Both, Masking = true },
                 new GridContainer
                 {
                     RelativeSizeAxes = Axes.Both,
@@ -345,6 +351,7 @@ namespace osu.Game.Screens.EditorSelect
             storeSets.BindCollectionChanged((_, _) => Scheduler.AddOnce(refresh));
             searchTextBox.Current.BindValueChanged(_ => Scheduler.AddOnce(updateFilter));
             SelectedSet.BindValueChanged(_ => updateDifficulties());
+            SelectedSet.BindValueChanged(_ => updateBackground(), true);
 
             refresh();
         }
@@ -402,6 +409,56 @@ namespace osu.Game.Screens.EditorSelect
                    || set.Beatmaps.Where(IsEditable).Any(b => contains(b.DifficultyName));
 
             bool contains(string? value) => value?.Contains(term, StringComparison.OrdinalIgnoreCase) == true;
+        }
+
+        /// <summary>
+        /// Shows the background of the selected set behind the lists, or nothing if the set has none.
+        /// </summary>
+        private void updateBackground()
+        {
+            int request = ++backgroundRequest;
+
+            backgroundContainer.Clear();
+
+            var beatmap = SelectedSet.Value?.Beatmaps.FirstOrDefault();
+
+            if (beatmap == null)
+                return;
+
+            Task.Run(() => beatmapManager.GetWorkingBeatmap(beatmap).GetBackground()).ContinueWith(t =>
+            {
+                var texture = t.IsCompletedSuccessfully ? t.GetResultSafely() : null;
+
+                Schedule(() =>
+                {
+                    if (request != backgroundRequest || texture == null)
+                        return;
+
+                    backgroundContainer.Child = new Container
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Children = new Drawable[]
+                        {
+                            new Sprite
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre,
+                                FillMode = FillMode.Fill,
+                                Texture = texture,
+                            },
+                            new Box
+                            {
+                                RelativeSizeAxes = Axes.Both,
+                                Colour = colourProvider.Background6,
+                                Alpha = 0.75f,
+                            },
+                        },
+                    };
+
+                    backgroundContainer.FadeInFromZero(300);
+                });
+            });
         }
 
         private void updateDifficulties()
