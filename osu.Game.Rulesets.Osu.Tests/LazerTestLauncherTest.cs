@@ -33,6 +33,14 @@ namespace osu.Game.Rulesets.Osu.Tests
         }
 
         [Test]
+        public void TestRealSetIDIsKept()
+        {
+            string file = "[Metadata]\r\nBeatmapID:5\r\nBeatmapSetID:456\r\n";
+
+            Assert.That(LazerTestLauncher.SetOnlineID(file, 123), Is.EqualTo(file));
+        }
+
+        [Test]
         public void TestSetIDIsAddedWhenTheBeatmapHasNone()
         {
             // beatmaps which were never submitted have no ID lines at all.

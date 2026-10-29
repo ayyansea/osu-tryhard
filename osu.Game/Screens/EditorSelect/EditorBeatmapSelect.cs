@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using osu.Framework.Allocation;
@@ -21,6 +22,7 @@ using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Overlays;
+using osu.Game.Overlays.Notifications;
 using osu.Game.Rulesets;
 using osu.Game.Screens.Backgrounds;
 using osu.Game.Screens.Edit;
@@ -70,6 +72,9 @@ namespace osu.Game.Screens.EditorSelect
         [Resolved]
         private RealmAccess realm { get; set; } = null!;
 
+        [Resolved]
+        private INotificationOverlay? notifications { get; set; }
+
         // The beatmap store is only used as a change trigger: its detached copies can be out of date after the editor saves,
         // so the list shown is always read straight from realm.
         private IBindableList<BeatmapSetInfo> storeSets = null!;
@@ -83,6 +88,7 @@ namespace osu.Game.Screens.EditorSelect
         private OsuSpriteText selectedSetText = null!;
         private FillFlowContainer<DifficultyRow> difficultyFlow = null!;
         private RoundedButton deleteButton = null!;
+        private LazerImportOverlay lazerImportOverlay = null!;
         private Container backgroundContainer = null!;
         private int backgroundRequest;
 
@@ -284,7 +290,7 @@ namespace osu.Game.Screens.EditorSelect
                                     {
                                         Anchor = Anchor.CentreLeft,
                                         Origin = Anchor.CentreLeft,
-                                        Text = "drag and drop .osz or .olz files onto this window to import beatmaps",
+                                        Text = "drag and drop .osz or .olz files onto this window to import beatmaps, or use \"import from lazer\"",
                                         Font = OsuFont.GetFont(size: 12),
                                         Colour = colourProvider.Content2,
                                     },
@@ -301,6 +307,8 @@ namespace osu.Game.Screens.EditorSelect
                     }
                 },
             };
+
+            AddInternal(lazerImportOverlay = new LazerImportOverlay(importFromLazer));
 
             foreach (var ruleset in rulesets.AvailableRulesets)
             {
@@ -323,6 +331,17 @@ namespace osu.Game.Screens.EditorSelect
                     }),
                 });
             }
+
+            newBeatmapButtons.Add(new RoundedButton
+            {
+                Anchor = Anchor.CentreLeft,
+                Origin = Anchor.CentreLeft,
+                Width = 150,
+                Height = 30,
+                Margin = new MarginPadding { Left = 15 },
+                Text = "import from lazer",
+                Action = lazerImportOverlay.Show,
+            });
 
             newBeatmapButtons.Add(new RoundedButton
             {
@@ -513,6 +532,38 @@ namespace osu.Game.Screens.EditorSelect
             Beatmap.SetDefault();
 
             this.Push(new EditorLoader());
+        }
+
+        /// <summary>
+        /// Imports a set of the osu!lazer installation: its files are packed into an archive and go through the usual import.
+        /// </summary>
+        private void importFromLazer(LazerSet set)
+        {
+            var notification = new ProgressNotification { State = ProgressNotificationState.Active, Text = $"Importing {set.Artist} - {set.Title} from osu!lazer..." };
+            notifications?.Post(notification);
+
+            Task.Run(async () =>
+            {
+                string directory = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), "osu-tryhard-lazer-import")).FullName;
+                string archivePath = Path.Combine(directory, $"{Guid.NewGuid()}.osz");
+
+                LazerLibrary.WriteArchive(set, LazerLibrary.DataDirectory, archivePath);
+
+                // the importer deletes the archive once it's done.
+                return (await beatmapManager.Import(notification, new[] { new ImportTask(archivePath) }).ConfigureAwait(false)).FirstOrDefault();
+            }).ContinueWith(t => Schedule(() =>
+            {
+                if (!t.IsCompletedSuccessfully)
+                {
+                    notification.State = ProgressNotificationState.Cancelled;
+                    notifications?.Post(new SimpleErrorNotification { Text = $"Couldn't import {set.Artist} - {set.Title}: {t.Exception?.GetBaseException().Message}" });
+                    return;
+                }
+
+                // the list is read before the selection is set, as updating the list drops a selection it doesn't know yet.
+                refresh();
+                SelectedSet.Value = t.GetResultSafely()?.PerformRead(s => s.Detach());
+            }));
         }
 
         private void deleteSelectedSet()

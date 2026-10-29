@@ -6,6 +6,8 @@ using NUnit.Framework;
 using osu.Framework.Bindables;
 using osu.Framework.Development;
 using osu.Framework.Extensions;
+using osu.Framework.Graphics;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Platform;
 using osu.Framework.Screens;
 using osu.Framework.Testing;
@@ -30,6 +32,9 @@ namespace osu.Game.Tests.Visual.Navigation
         protected override bool DisplayCursorForManualInput => false;
 
         private EditorBeatmapSelect beatmapSelect = null!;
+
+        // the lazer import overlay has a search box of its own.
+        private Graphics.UserInterface.SearchTextBox screenSearch => game.ChildrenOfType<Graphics.UserInterface.SearchTextBox>().Single(s => s.FindClosestParent<LazerImportOverlay>() == null);
 
         [SetUpSteps]
         public void SetUpSteps()
@@ -98,10 +103,10 @@ namespace osu.Game.Tests.Visual.Navigation
             AddStep("import beatmap", () => game.BeatmapManager.Import(TestResources.GetQuickTestBeatmapForImport()).WaitSafely());
             AddUntilStep("beatmap set listed", () => game.ChildrenOfType<BeatmapSetRow>().Count(r => r.IsPresent && r.Current.Value != null), () => Is.EqualTo(1));
 
-            AddStep("search for nonsense", () => game.ChildrenOfType<Graphics.UserInterface.SearchTextBox>().Single().Current.Value = "zzzzzzzz");
+            AddStep("search for nonsense", () => screenSearch.Current.Value = "zzzzzzzz");
             AddUntilStep("no beatmap sets listed", () => game.ChildrenOfType<BeatmapSetRow>().Count(r => r.IsPresent && r.Current.Value != null), () => Is.Zero);
 
-            AddStep("clear search", () => game.ChildrenOfType<Graphics.UserInterface.SearchTextBox>().Single().Current.Value = string.Empty);
+            AddStep("clear search", () => screenSearch.Current.Value = string.Empty);
             AddUntilStep("beatmap set listed again", () => game.ChildrenOfType<BeatmapSetRow>().Count(r => r.IsPresent && r.Current.Value != null), () => Is.EqualTo(1));
         }
 
@@ -116,6 +121,31 @@ namespace osu.Game.Tests.Visual.Navigation
             AddUntilStep("prompted to save", () => game.ChildrenOfType<PromptForSaveDialog>().SingleOrDefault()?.IsPresent == true);
             AddStep("discard new beatmap", () => game.ChildrenOfType<PromptForSaveDialog>().Single().PerformOkAction());
             AddUntilStep("back at beatmap select", () => game.ScreenStack.CurrentScreen is EditorBeatmapSelect);
+        }
+
+        [Test]
+        public void TestImportFromLazer()
+        {
+            AddStep("require osu!lazer", () =>
+            {
+                if (!System.IO.File.Exists(System.IO.Path.Combine(LazerLibrary.DataDirectory, "client.realm")))
+                    Assert.Inconclusive("osu!lazer isn't installed");
+            });
+
+            AddStep("open the import overlay", () =>
+            {
+                InputManager.MoveMouseTo(game.ChildrenOfType<Graphics.UserInterfaceV2.RoundedButton>().First(b => b.Text.ToString() == "import from lazer"));
+                InputManager.Click(MouseButton.Left);
+            });
+
+            AddUntilStep("lazer sets listed", () => game.ChildrenOfType<IHasCurrentValue<LazerSet>>().Any(r => ((Drawable)r).IsPresent && r.Current.Value != null));
+            AddStep("click first set", () =>
+            {
+                InputManager.MoveMouseTo((Drawable)game.ChildrenOfType<IHasCurrentValue<LazerSet>>().First(r => ((Drawable)r).IsPresent && r.Current.Value != null));
+                InputManager.Click(MouseButton.Left);
+            });
+
+            AddUntilStep("set imported and selected", () => beatmapSelect.SelectedSet.Value != null && game.ChildrenOfType<BeatmapSetRow>().Any(r => r.IsPresent && r.Current.Value != null));
         }
 
         private partial class TestOsuEditorGame : OsuEditorGame
