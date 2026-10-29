@@ -29,16 +29,19 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private readonly bool showWaveform;
 
-        private const float rhythm_strip_height = 14;
+        public const float RHYTHM_STRIP_HEIGHT = 14;
 
         private readonly Drawable userContent;
+
+        private readonly bool rhythmStripAtTop;
 
         private bool alwaysShowControlPoints;
 
         private bool showRhythmStrip;
 
         /// <summary>
-        /// Whether the rhythm blueprint strip should be shown below the timeline (subject to user configuration).
+        /// Whether the rhythm blueprint strip should be shown (subject to user configuration).
+        /// Compose puts it under the timeline; the hitsounds grid puts it above its content.
         /// </summary>
         public bool ShowRhythmStrip
         {
@@ -49,6 +52,13 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                 rhythmStripVisible?.TriggerChange();
             }
         }
+
+        private readonly BindableBool rhythmStripShown = new BindableBool();
+
+        /// <summary>
+        /// Whether the strip is currently taking space. Lets siblings (the hitsound lane labels) stay aligned with the grid.
+        /// </summary>
+        public IBindable<bool> RhythmStripShown => rhythmStripShown;
 
         [Resolved(CanBeNull = true)]
         private EditorRhythm? rhythm { get; set; }
@@ -105,6 +115,8 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private WaveformGraph waveform = null!;
 
+        private Container mainContent = null!;
+
         private TimelineTickDisplay ticks = null!;
 
         private TimelineTimingChangeDisplay controlPoints = null!;
@@ -115,11 +127,12 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private double trackLengthForZoom;
 
-        public Timeline(Drawable userContent, float timelineHeight = 80, bool showWaveform = true)
+        public Timeline(Drawable userContent, float timelineHeight = 80, bool showWaveform = true, bool rhythmStripAtTop = false)
         {
             this.userContent = userContent;
             this.timelineHeight = timelineHeight;
             this.showWaveform = showWaveform;
+            this.rhythmStripAtTop = rhythmStripAtTop;
 
             RelativeSizeAxes = Axes.X;
             Height = timelineHeight;
@@ -161,7 +174,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                     Anchor = Anchor.CentreLeft,
                     Origin = Anchor.CentreLeft,
                 },
-                new Container
+                mainContent = new Container
                 {
                     RelativeSizeAxes = Axes.X,
                     Height = timelineHeight,
@@ -186,10 +199,11 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
             {
                 Add(rhythmStrip = new TimelineRhythmStrip
                 {
-                    Anchor = Anchor.BottomLeft,
-                    Origin = Anchor.BottomLeft,
+                    // the hitsounds grid is the timeline content, so the strip goes above it instead of under a separate bar.
+                    Anchor = rhythmStripAtTop ? Anchor.TopLeft : Anchor.BottomLeft,
+                    Origin = rhythmStripAtTop ? Anchor.TopLeft : Anchor.BottomLeft,
                     RelativeSizeAxes = Axes.X,
-                    Height = rhythm_strip_height,
+                    Height = RHYTHM_STRIP_HEIGHT,
                     Alpha = 0,
                 });
 
@@ -240,7 +254,9 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                 bool visible = showRhythmStrip && rhythmStripVisible.Value;
 
                 rhythmStrip!.Alpha = visible ? 1 : 0;
-                Height = timelineHeight + (visible ? rhythm_strip_height : 0);
+                rhythmStripShown.Value = visible;
+                mainContent.Y = visible && rhythmStripAtTop ? RHYTHM_STRIP_HEIGHT : 0;
+                Height = timelineHeight + (visible ? RHYTHM_STRIP_HEIGHT : 0);
             }, true);
 
             controlPointsVisible.BindValueChanged(visible =>

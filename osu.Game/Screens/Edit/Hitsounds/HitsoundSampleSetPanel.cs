@@ -135,7 +135,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
         {
             var set = Current.Value;
 
-            caption.Text = set == null ? string.Empty : $"{set.Name} - click + to add a sound file, click a sound to play it, right click to remove it";
+            caption.Text = set?.Name ?? string.Empty;
 
             // the set's own file list can be stale, so look it up again.
             var files = editorBeatmap.BeatmapSkin?.GetAvailableSampleSets().FirstOrDefault(s => s.SampleSetIndex == set?.SampleSetIndex)?.Filenames ?? new HashSet<string>();
@@ -209,9 +209,15 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 Action = () => this.ShowPopover();
             }
 
-            public void UpdateText() => Text = string.IsNullOrEmpty(panel.samplesDirectory.Value)
-                ? "sound folder: not set (click to choose where the file chooser starts)"
-                : $"sound folder: {new DirectoryInfo(panel.samplesDirectory.Value).Name} (click to change)";
+            public void UpdateText()
+            {
+                bool set = !string.IsNullOrEmpty(panel.samplesDirectory.Value);
+
+                Text = set ? $"sound folder: {new DirectoryInfo(panel.samplesDirectory.Value).Name}" : "sound folder";
+                TooltipText = set
+                    ? $"{panel.samplesDirectory.Value} (click to change where the file chooser starts)"
+                    : "Choose the folder the file chooser starts in.";
+            }
 
             public Popover GetPopover() => new FolderPopover(panel.defaultDirectory, path => panel.samplesDirectory.Value = path);
         }

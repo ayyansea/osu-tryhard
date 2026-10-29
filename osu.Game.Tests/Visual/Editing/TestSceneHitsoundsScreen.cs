@@ -1,11 +1,17 @@
 // Copyright (c) ppy Pty Ltd <contact@ppy.sh>. Licensed under the MIT Licence.
 // See the LICENCE file in the repository root for full licence text.
 
+using System;
 using System.Linq;
 using NUnit.Framework;
+using osu.Framework.Allocation;
+using osu.Framework.Graphics.Sprites;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input;
 using osu.Framework.Testing;
 using osu.Game.Audio;
+using osu.Game.Configuration;
+using osu.Game.Graphics.Sprites;
 using osu.Game.Graphics.UserInterface;
 using osu.Game.Graphics.UserInterfaceV2;
 using osu.Game.Beatmaps;
@@ -14,6 +20,7 @@ using osu.Game.Rulesets;
 using osu.Game.Rulesets.Osu;
 using osu.Game.Screens.Edit.Compose.Components.Timeline;
 using osu.Game.Screens.Edit.Hitsounds;
+using osu.Game.Screens.Edit.Rhythm;
 using osu.Game.Tests.Beatmaps;
 using osuTK;
 using osuTK.Input;
@@ -35,6 +42,9 @@ namespace osu.Game.Tests.Visual.Editing
         private EditorHitsounds hitsounds => Editor.ChildrenOfType<EditorHitsounds>().Single();
 
         private HitsoundPatternEditor pattern => Editor.ChildrenOfType<HitsoundPatternEditor>().Single();
+
+        [Resolved]
+        private OsuConfigManager config { get; set; } = null!;
 
         public override void SetUpSteps()
         {
@@ -155,5 +165,55 @@ namespace osu.Game.Tests.Visual.Editing
         }
 
         private FormSliderBar<int> volumeSlider(string caption) => Editor.ChildrenOfType<FormSliderBar<int>>().Single(s => s.Caption.ToString() == caption);
+
+        [Test]
+        public void TestRhythmStripAboveGrid()
+        {
+            AddStep("enable rhythm strip", () => config.SetValue(OsuSetting.EditorTimelineShowRhythmStrip, true));
+            AddStep("add rhythm", () =>
+            {
+                var beatmap = Editor.ChildrenOfType<EditorRhythm>().Single().Beatmap;
+                beatmap.Add(new RhythmHitObject { StartTime = 500 });
+                beatmap.Add(new RhythmHold { StartTime = 1000, Duration = 1000 });
+            });
+
+            AddUntilStep("strip visible above the grid", () =>
+            {
+                var strip = hitsoundStrip();
+                return strip?.Alpha == 1 && strip.Children.Count == 3 && stripAboveGrid(strip);
+            });
+            AddAssert("labels line up with the grid", labelsLineUp);
+
+            AddStep("disable rhythm strip", () => config.SetValue(OsuSetting.EditorTimelineShowRhythmStrip, false));
+            AddUntilStep("strip hidden", () => hitsoundStrip()!.Alpha == 0);
+            AddAssert("labels still line up", labelsLineUp);
+        }
+
+        [Test]
+        public void TestHelpButton()
+        {
+            AddAssert("instructions are not on the screen", () => !this.ChildrenOfType<OsuSpriteText>().Any(t => t.Text.ToString().Contains("Paint")));
+            AddStep("open help", () =>
+            {
+                InputManager.MoveMouseTo(Editor.ChildrenOfType<HitsoundsScreen>().Single().ChildrenOfType<RoundedButton>().Single(b => b.Text.ToString() == "help"));
+                InputManager.Click(MouseButton.Left);
+            });
+            AddUntilStep("help popover shown", () => this.ChildrenOfType<Popover>().Any(p => p.ChildrenOfType<SpriteText>().Any(t => t.Text.ToString().Contains("Paint"))));
+        }
+
+        private TimelineRhythmStrip? hitsoundStrip() => Editor.ChildrenOfType<HitsoundsScreen>().Single().ChildrenOfType<TimelineRhythmStrip>().SingleOrDefault();
+
+        private static bool stripAboveGrid(TimelineRhythmStrip strip)
+        {
+            var grid = strip.Parent!.ChildrenOfType<HitsoundPatternEditor>().Single();
+            return strip.ScreenSpaceDrawQuad.BottomLeft.Y <= grid.ScreenSpaceDrawQuad.TopLeft.Y + 1;
+        }
+
+        private bool labelsLineUp()
+        {
+            var labels = Editor.ChildrenOfType<HitsoundLaneLabels>().Single();
+            var grid = Editor.ChildrenOfType<HitsoundPatternEditor>().Single();
+            return Math.Abs(labels.ScreenSpaceDrawQuad.TopLeft.Y - grid.ScreenSpaceDrawQuad.TopLeft.Y) < 2;
+        }
     }
 }

@@ -4,11 +4,14 @@
 using System.Linq;
 using osu.Framework.Allocation;
 using osu.Framework.Bindables;
+using osu.Framework.Extensions;
 using osu.Framework.Extensions.Color4Extensions;
 using osu.Framework.Extensions.ObjectExtensions;
 using osu.Framework.Graphics;
 using osu.Game.Beatmaps;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
+using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input;
 using osu.Framework.Input.Bindings;
 using osu.Framework.Input.Events;
@@ -46,6 +49,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
         private readonly BindableInt selectionVolume = createVolume();
         private readonly BindableInt allVolume = createVolume();
         private HitsoundPatternEditor patternEditor = null!;
+        private TimelineArea timelineArea = null!;
+        private Container rhythmStripSpacer = null!;
+        private IBindable<bool>? rhythmStripShown;
         private bool refreshingVolumes;
 
         [Resolved]
@@ -73,8 +79,6 @@ namespace osu.Game.Screens.Edit.Hitsounds
         [BackgroundDependencyLoader]
         private void load()
         {
-            OsuTextFlowContainer legend;
-
             Child = new GridContainer
             {
                 RelativeSizeAxes = Axes.Both,
@@ -168,12 +172,8 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                                     createVolumeSlider("all volume", "Sets the volume of every sound of the track. Shows the average when they differ.", allVolume),
                                                 },
                                             },
+                                            new HelpButton { Width = 70, Height = 28, Text = "help" },
                                             status = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12)) { RelativeSizeAxes = Axes.X, AutoSizeAxes = Axes.Y },
-                                            legend = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 12))
-                                            {
-                                                RelativeSizeAxes = Axes.X,
-                                                AutoSizeAxes = Axes.Y,
-                                            },
                                         }
                                     },
                                 }
@@ -197,16 +197,25 @@ namespace osu.Game.Screens.Edit.Hitsounds
                                     new Container
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        Child = new HitsoundLaneLabels(layout, hitsounds)
+                                        Child = new FillFlowContainer
                                         {
                                             Anchor = Anchor.Centre,
                                             Origin = Anchor.Centre,
+                                            Width = HitsoundLaneLabels.WIDTH,
+                                            AutoSizeAxes = Axes.Y,
+                                            Direction = FillDirection.Vertical,
+                                            Children = new Drawable[]
+                                            {
+                                                // matches the strip Timeline inserts above the grid, so the names stay on their lanes.
+                                                rhythmStripSpacer = new Container { RelativeSizeAxes = Axes.X },
+                                                new HitsoundLaneLabels(layout, hitsounds),
+                                            },
                                         },
                                     },
                                     new Container
                                     {
                                         RelativeSizeAxes = Axes.Both,
-                                        Child = new TimelineArea(patternEditor = new HitsoundPatternEditor(hitsounds, layout, selectMode) { RelativeSizeAxes = Axes.Both }, HitsoundLayout.HEIGHT, false)
+                                        Child = timelineArea = new TimelineArea(patternEditor = new HitsoundPatternEditor(hitsounds, layout, selectMode) { RelativeSizeAxes = Axes.Both }, HitsoundLayout.HEIGHT, false, true, true)
                                         {
                                             Anchor = Anchor.Centre,
                                             Origin = Anchor.Centre,
@@ -271,11 +280,6 @@ namespace osu.Game.Screens.Edit.Hitsounds
                 EditorBeatmap.BeatmapSkin.BeatmapSkinChanged += scheduleRegisterSampleSets;
 
 
-            legend.AddText("paint tool (2): click or drag in a lane (snaps to the beat divisor) to place or erase that sound, right click deletes a step.\n" +
-                           "select tool (1): click a sound, ctrl / shift click to add, drag to box select the sounds of the lanes the box covers, double click a lane name to select its whole lane, drag a selected sound to move the selection, delete to delete, ctrl+a / x / c / v.\n" +
-                           "scroll over the lane names (or use lanes up / down) to see other banks and sample sets, click a lane name to hear it. play the track to audition.\n" +
-                           "volume: the height of a sound shows its volume. \"paint volume\" is the volume of the sounds you paint, \"selected volume\" sets the volume of the selection (double click a lane name to select a whole lane) and \"all volume\" the volume of everything. a step holds one volume in a .osu file, so sounds with different volumes in one step get a red mark.\n" +
-                           "the hitsounds belong to the whole set and are independent of hit objects. \"apply\" assigns them to the objects at the same time (steps with no object are dropped), to this difficulty or to every difficulty of the set (which saves them); \"import\" replaces the hitsounds with this difficulty's current samples.");
         }
 
         protected override void LoadComplete()
@@ -284,6 +288,9 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
             // the chooser has to be loaded before its items can be read.
             registerSampleSets();
+
+            rhythmStripShown = timelineArea.Timeline.RhythmStripShown.GetBoundCopy();
+            rhythmStripShown.BindValueChanged(shown => rhythmStripSpacer.Height = shown.NewValue ? Timeline.RHYTHM_STRIP_HEIGHT : 0, true);
         }
 
         private void applyToAll()
@@ -295,7 +302,7 @@ namespace osu.Game.Screens.Edit.Hitsounds
 
         private static string describeUnrepresentable(int unrepresentable) => unrepresentable == 0
             ? string.Empty
-            : $" {unrepresentable} hit object(s) / slider node(s) got a mix of banks, sample sets or volumes (red mark above the step) which a .osu file can't store exactly, only one normal bank, one addition bank, one sample set and one volume per object survive saving.";
+            : $" {unrepresentable} step(s) mix banks, sample sets or volumes (red mark); a .osu file keeps only one of each.";
 
         private void apply()
         {
@@ -459,7 +466,40 @@ namespace osu.Game.Screens.Edit.Hitsounds
             if (EditorBeatmap.IsNotNull() && EditorBeatmap.BeatmapSkin != null)
                 EditorBeatmap.BeatmapSkin.BeatmapSkinChanged -= scheduleRegisterSampleSets;
 
+            rhythmStripShown?.UnbindAll();
+
             base.Dispose(isDisposing);
+        }
+
+        private partial class HelpButton : RoundedButton, IHasPopover
+        {
+            public HelpButton()
+            {
+                Action = () => this.ShowPopover();
+            }
+
+            public Popover GetPopover() => new HelpPopover();
+        }
+
+        private partial class HelpPopover : OsuPopover
+        {
+            public HelpPopover()
+            {
+                OsuTextFlowContainer text;
+
+                Child = text = new OsuTextFlowContainer(s => s.Font = OsuFont.GetFont(size: 14))
+                {
+                    Width = 420,
+                    AutoSizeAxes = Axes.Y,
+                };
+
+                text.AddParagraph("Paint (2): click or drag in a lane to place or erase that sound. It snaps to the beat divisor. Right click deletes a step.");
+                text.AddParagraph("Select (1): click a sound, ctrl or shift click to add, drag to box-select. Double click a lane name to select the whole lane. Drag a selected sound to move the selection. Delete removes it. Ctrl+A / X / C / V.");
+                text.AddParagraph("Scroll the lane names, or use lanes up / down, to see other banks and sample sets. Click a lane name to hear it. Play the track to audition.");
+                text.AddParagraph("The height of a sound is its volume. Paint volume is used for new sounds. Selected volume and all volume edit the selection or everything, and show the average when sounds differ. A .osu file stores one volume per object, so a step with mixed volumes gets a red mark.");
+                text.AddParagraph("Hitsounds belong to the whole set, not to hit objects. Apply copies them onto objects at the same time (steps with no object are dropped), for this difficulty or every difficulty (which saves them). Import replaces the track with this difficulty's samples.");
+                text.AddParagraph("Sample files: click + to add a file, click a sound to play it, right click to remove it. Sound folder chooses where the file chooser starts.");
+            }
         }
     }
 }

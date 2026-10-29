@@ -22,11 +22,13 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
 
         private readonly float timelineHeight;
         private readonly bool showWaveform;
+        private readonly bool showRhythmStrip;
+        private readonly bool rhythmStripAtTop;
 
         private Box timelineBackground = null!;
         private readonly Bindable<bool> composerFocusMode = new Bindable<bool>();
 
-        public TimelineArea(Drawable? content = null, float timelineHeight = 80, bool showWaveform = true)
+        public TimelineArea(Drawable? content = null, float timelineHeight = 80, bool showWaveform = true, bool showRhythmStrip = false, bool rhythmStripAtTop = false)
         {
             RelativeSizeAxes = Axes.X;
             AutoSizeAxes = Axes.Y;
@@ -34,6 +36,8 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
             userContent = content ?? Empty();
             this.timelineHeight = timelineHeight;
             this.showWaveform = showWaveform;
+            this.showRhythmStrip = showRhythmStrip;
+            this.rhythmStripAtTop = rhythmStripAtTop;
         }
 
         [BackgroundDependencyLoader]
@@ -81,7 +85,7 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                                         Depth = float.MaxValue,
                                         Colour = colourProvider.Background5
                                     },
-                                    Timeline = new Timeline(userContent, timelineHeight, showWaveform),
+                                    Timeline = new Timeline(userContent, timelineHeight, showWaveform, rhythmStripAtTop),
                                 }
                             },
                             new Container
@@ -128,6 +132,9 @@ namespace osu.Game.Screens.Edit.Compose.Components.Timeline
                     },
                 }
             };
+
+            if (showRhythmStrip)
+                Timeline.ShowRhythmStrip = true;
 
             if (editor != null)
                 composerFocusMode.BindTo(editor.ComposerFocusMode);

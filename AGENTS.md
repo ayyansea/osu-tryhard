@@ -81,7 +81,7 @@ Outside the repo, handy for reading (not editable from inside this repo's toolin
 
 ### 4.3 Timeline
 
-`Compose/Components/Timeline/Timeline.cs` (scrolling/zooming; the centre marker is the current time) hosts "user content" supplied to `TimelineArea(content, timelineHeight = 80, showWaveform = true)`. Both extra parameters were added by the fork (hitsounds screen uses a tall, waveform-less timeline).
+`Compose/Components/Timeline/Timeline.cs` (scrolling/zooming; the centre marker is the current time) hosts "user content" supplied to `TimelineArea(content, timelineHeight = 80, showWaveform = true, showRhythmStrip = false, rhythmStripAtTop = false)`. The extra parameters were added by the fork (hitsounds screen uses a tall, waveform-less timeline with the rhythm strip above the grid).
 
 `TimelinePart` (`Edit/Components/Timelines/Summary/Parts`) is the base for anything aligned to time: it sets `Content.RelativeChildSize = (trackLength, 1)`, so children use `RelativePositionAxes = X`, `X = time in ms`, pixel sizes.
 
@@ -102,7 +102,7 @@ Files:
 | `HitsoundLaneLabels.cs` | Lane names left of the timeline: click previews, scroll pages sections, double click selects a lane. |
 | `HitsoundSampleSetPanel.cs` | Sample set file management (reuses `FormSampleSetChooser`), file chooser with preview, sound folder setting. |
 | `HitsoundSampleProcessor.cs` | The pipeline run on every added custom sound file. |
-| `HitsoundsScreen.cs` | The screen: layout, tool buttons, apply/import buttons, key handling, clipboard actions. |
+| `HitsoundsScreen.cs` | The screen: layout, tool buttons, apply/import buttons, key handling, clipboard actions. Instructions live in the help popover, not on the screen. |
 
 Model:
 - `HitsoundStep : HitObject`: just `StartTime` and `Samples` (normal + additions). Steps live in `EditorHitsounds.Steps` (sorted by time), **not** in an `EditorBeatmap`. (A second `EditorBeatmap` as a child breaks many test lookups; see 5.2.)
@@ -138,7 +138,7 @@ Ranking criteria relevant to this system (checked against the wiki): hitsounds m
 
 ### 5.2 Rhythm blueprint (`Screens/Edit/Rhythm/`)
 
-A non-positional rhythm of clicks/holds to lay out before placing objects. `EditorRhythm` keeps its **own `EditorBeatmap` child** (sharing the real `ControlPointInfo`), so the whole timeline selection/editing machinery works on it. Consequences: test helpers filter `ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm)` (there are ~20 such lookups; this is also why hitsounds avoided a second `EditorBeatmap`). Stored per difficulty in `rhythm/<BeatmapInfo.ID>.txt` (`RhythmSerializer`), own `RhythmChangeHandler`, shown as a strip under the compose timeline (setting `EditorTimelineShowRhythmStrip`). `RhythmScreen` re-caches the rhythm beatmap as `EditorBeatmap` for its children.
+A non-positional rhythm of clicks/holds to lay out before placing objects. `EditorRhythm` keeps its **own `EditorBeatmap` child** (sharing the real `ControlPointInfo`), so the whole timeline selection/editing machinery works on it. Consequences: test helpers filter `ChildrenOfType<EditorBeatmap>().Where(b => b.Parent is not EditorRhythm)` (there are ~20 such lookups; this is also why hitsounds avoided a second `EditorBeatmap`). Stored per difficulty in `rhythm/<BeatmapInfo.ID>.txt` (`RhythmSerializer`), own `RhythmChangeHandler`, shown as a strip under the compose timeline and above the hitsounds grid (setting `EditorTimelineShowRhythmStrip`; `Timeline.RhythmStripShown` is what the hitsound lane labels pad by, so they stay aligned when the strip is toggled). `RhythmScreen` re-caches the rhythm beatmap as `EditorBeatmap` for its children.
 
 ### 5.3 Test in osu!lazer (`Screens/Edit/LazerTestLauncher.cs`)
 
